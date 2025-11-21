@@ -1,0 +1,127 @@
+# OSX
+.DS_Store
+
+# Xcode
+build/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata
+*.xccheckout
+*.moved-aside
+DerivedData
+*.hmap
+*.ipa
+*.xcuserstate
+ios/.xcode.env.local
+ios/Pods/
+ios/build/
+ios/*.xcworkspace
+ios/*.xcodeproj/xcuserdata
+ios/*.xcodeproj/project.xcworkspace/xcuserdata
+ios/*.xcworkspace/contents.xcworkspacedata
+ios/*.xcworkspace/xcuserdata
+ios/*.xcworkspace/xcshareddata
+ios/*.xcodeproj/project.xcworkspace/xcshareddata
+
+# Android/IntelliJ
+android/app/build/
+android/build/
+android/.gradle
+android/captures/
+android/gradlew
+android/gradlew.bat
+android/local.properties
+android/*.iml
+android/*.keystore
+!debug.keystore
+android/.idea/
+android/app/*.apk
+android/app/*.ap_
+android/app/proguard/
+android/app/src/main/res/merged/
+android/app/src/main/res/raw/
+android/app/src/main/res/values/ids.xml
+android/app/src/main/res/values/strings.xml
+android/app/src/main/res/values/styles.xml
+android/app/src/main/res/values/colors.xml
+android/app/src/main/res/values/dimens.xml
+android/app/src/main/res/values/attrs.xml
+android/app/src/main/res/values/ids.xml
+android/app/src/main/res/values/strings.xml
+android/app/src/main/res/values/styles.xml
+android/app/src/main/res/values/colors.xml
+android/app/src/main/res/values/dimens.xml
+android/app/src/main/res/values/attrs.xml
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+.pnp/
+.pnp.js
+.yarn-integrity
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# Env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*
+
+# Babel
+*.log
+
+# Metro
+.metro-health-check*
+.metro-cache/
+
+# Bundle
+*.jsbundle
+*.map
+
+# Testing
+coverage/
+__tests__/__snapshots__/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+fastlane/README.md
+fastlane/metadata
+fastlane/supply
+fastlane/screenshots
+
+# Bundle artifact
+*.jsbundle
+
+# CocoaPods
+/ios/Pods/
+/ios/Podfile.lock
+
+# TypeScript
+*.tsbuildinfo
+
+# VS Code
+.vscode/
+
+# Temp files
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
