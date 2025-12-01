@@ -19,7 +19,7 @@ begin
       content,
       user_id,
       extract(epoch from created_at) * 1000 as created_at,
-      extract(epoch from updated_at) * 1000 as updated_at
+      cast(extract(epoch from updated_at) * 1000 as bigint) as updated_at
     from public.entries
     where updated_at > _ts
     and user_id = auth.uid()
@@ -32,11 +32,11 @@ begin
       id,
       entry_id,
       coalesce(mood, '') as mood,
-      coalesce(activities, '[]'::text[]) as activities,
-      coalesce(people, '[]'::text[]) as people,
+      coalesce(activities, '[]'::jsonb) as activities,
+      coalesce(people, '[]'::jsonb) as people,
       sentiment_score, -- Keep null as is for numbers
-      coalesce(tags, '[]'::text[]) as tags,
-      extract(epoch from created_at) * 1000 as created_at
+      coalesce(tags, array[]::text[]) as tags,
+      cast(extract(epoch from created_at) * 1000 as bigint) as created_at
     from public.entry_signals
     where created_at > _ts
     and exists (select 1 from public.entries where id = entry_signals.entry_id and user_id = auth.uid())
@@ -44,10 +44,18 @@ begin
 
   return jsonb_build_object(
     'changes', jsonb_build_object(
-      'entries', coalesce(_entries, '[]'::jsonb),
-      'entry_signals', coalesce(_signals, '[]'::jsonb)
+      'entries', jsonb_build_object(
+        'created', coalesce(_entries, '[]'::jsonb),
+        'updated', '[]'::jsonb,
+        'deleted', '[]'::jsonb
+      ),
+      'entry_signals', jsonb_build_object(
+        'created', coalesce(_signals, '[]'::jsonb),
+        'updated', '[]'::jsonb,
+        'deleted', '[]'::jsonb
+      )
     ),
-    'timestamp', extract(epoch from now()) * 1000
+    'timestamp', cast(extract(epoch from now()) * 1000 as bigint)
   );
 end;
 $$ language plpgsql security definer;
@@ -69,7 +77,10 @@ begin
         auth.uid(),
         to_timestamp((_entry->>'created_at')::bigint / 1000),
         to_timestamp((_entry->>'updated_at')::bigint / 1000)
-      );
+      )
+      on conflict (id) do update set
+        content = excluded.content,
+        updated_at = excluded.updated_at;
     end loop;
   end if;
 
@@ -91,10 +102,8 @@ begin
         (_signal->>'id')::uuid,
         (_signal->>'entry_id')::uuid,
         case when (_signal->>'mood') is null or (_signal->>'mood') = '' then null else _signal->>'mood' end,
-        case when (_signal->'activities') is null or jsonb_typeof(_signal->'activities') = 'null' then '[]'::text[] 
-             else (select array_agg(x) from jsonb_array_elements_text(_signal->'activities') t(x)) end,
-        case when (_signal->'people') is null or jsonb_typeof(_signal->'people') = 'null' then '[]'::text[] 
-             else (select array_agg(x) from jsonb_array_elements_text(_signal->'people') t(x)) end,
+        coalesce(_signal->'activities', '[]'::jsonb),
+        coalesce(_signal->'people', '[]'::jsonb),
         case when (_signal->>'sentiment_score') is null or (_signal->>'sentiment_score') = '' then null 
              else (_signal->>'sentiment_score')::float end,
         case when (_signal->'tags') is null or jsonb_typeof(_signal->'tags') = 'null' then '[]'::text[] 

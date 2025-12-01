@@ -1,5 +1,6 @@
 import { Model } from '@nozbe/watermelondb';
 import { date, field, json, relation } from '@nozbe/watermelondb/decorators';
+import { generateUUID } from '../../lib/uuid';
 import Entry from './Entry';
 
 const sanitize = (raw: any) => (Array.isArray(raw) ? raw : []);
@@ -18,4 +19,9 @@ export default class EntrySignal extends Model {
   @field('sentiment_score') sentimentScore!: number;
   @json('tags', sanitize) tags!: string[];
   @date('created_at') createdAt!: Date;
+
+  // Use centralized UUID generation
+  static async generateId() {
+    return generateUUID();
+  }
 }

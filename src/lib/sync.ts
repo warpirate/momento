@@ -1,36 +1,139 @@
 import { synchronize } from '@nozbe/watermelondb/sync';
 import { database } from '../db';
 import { supabase } from './supabaseClient';
+import { generateUUID, isValidUUID } from './uuid';
+import { RealtimeChannel } from '@supabase/supabase-js';
+
+let syncInProgress = false;
 
 export async function sync() {
-  await synchronize({
-    database,
-    pullChanges: async ({ lastPulledAt, schemaVersion, migration }) => {
-      const { data, error } = await supabase.rpc('pull_changes', {
-        last_pulled_at: lastPulledAt,
-        schema_version: schemaVersion,
-      });
+  if (syncInProgress) {
+    console.log('Sync already in progress, skipping...');
+    return;
+  }
 
-      if (error) {
-        throw new Error(error.message);
+  syncInProgress = true;
+  try {
+    console.log('Starting sync...');
+    await synchronize({
+      database,
+      pullChanges: async ({ lastPulledAt, schemaVersion, migration }) => {
+        console.log('Pulling changes...', { lastPulledAt, schemaVersion });
+        
+        // Add debug info about authentication
+        const { data: { session } } = await supabase.auth.getSession();
+        console.log('Current session:', session ? 'authenticated' : 'not authenticated');
+        if (session) {
+          console.log('User ID:', session.user.id);
+        }
+        
+        // Force a fresh pull by using a slightly older timestamp to avoid cache issues
+        const freshLastPulledAt = lastPulledAt ? lastPulledAt - 1000 : 0;
+        console.log('Using fresh timestamp:', freshLastPulledAt);
+        
+        const { data, error } = await supabase.rpc('pull_changes', {
+          last_pulled_at: freshLastPulledAt,
+          schema_version: schemaVersion,
+        });
+
+        if (error) {
+          console.error('Pull changes error:', error);
+          throw new Error(error.message);
+        }
+
+        const { changes, timestamp } = data;
+        console.log('Pulled changes:', changes);
+        console.log('Timestamp from server:', timestamp);
+        return { changes, timestamp: Math.floor(timestamp) };
+      },
+      pushChanges: async ({ changes, lastPulledAt }) => {
+        console.log('Pushing changes...', { changes, lastPulledAt });
+        
+        console.log('Changes to push details:', JSON.stringify(changes, null, 2));
+        
+        // Validate UUIDs and fix if needed, and ensure timestamps are integers
+        const validatedChanges = JSON.parse(JSON.stringify(changes, (key, value) => {
+          if (key === 'id' || key === 'entry_id' || key === 'user_id') {
+            if (typeof value === 'string' && !isValidUUID(value)) {
+              console.warn(`Invalid UUID detected for ${key}: ${value}. Generating new UUID.`);
+              return generateUUID();
+            }
+          }
+          // Ensure all timestamp values are integers, not floats
+          if (key === 'created_at' || key === 'updated_at' || key === 'last_pulled_at') {
+            return typeof value === 'number' ? Math.floor(value) : value;
+          }
+          return value;
+        }));
+        
+        const sanitizedLastPulledAt = Math.floor(lastPulledAt || 0);
+        
+        console.log('Validated changes:', JSON.stringify(validatedChanges, null, 2));
+        console.log('Last pulled at (sanitized):', sanitizedLastPulledAt);
+        
+        const { error, data } = await supabase.rpc('push_changes', {
+          changes: validatedChanges,
+          last_pulled_at: sanitizedLastPulledAt,
+        });
+
+        if (error) {
+          console.error('Push changes error:', error);
+          console.error('Error details:', JSON.stringify(error, null, 2));
+          throw new Error(error.message);
+        }
+        console.log('Push successful. Response:', data);
+      },
+      // Migrations are not configured for the local database yet, so we disable
+      // migration-based sync. This avoids WatermelonDB's
+      // "[Sync] Migration syncs cannot be enabled on a database that does not support migrations"
+      // diagnostic error.
+    });
+    console.log('Sync completed successfully');
+  } catch (error) {
+    console.warn('Sync failed:', error);
+    console.error('Full error details:', JSON.stringify(error, null, 2));
+    throw error; // Re-throw to let calling code handle it
+  } finally {
+    syncInProgress = false;
+  }
+}
+
+let subscription: RealtimeChannel | null = null;
+
+export function setupRealtimeSubscription(userId: string) {
+  if (subscription) {
+    return () => {};
+  }
+
+  console.log('Setting up realtime subscription for user:', userId);
+
+  subscription = supabase
+    .channel('db-changes')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'entries', filter: `user_id=eq.${userId}` },
+      (payload) => {
+        console.log('Realtime change detected in entries:', payload);
+        sync();
       }
-
-      const { changes, timestamp } = data;
-      return { changes, timestamp };
-    },
-    pushChanges: async ({ changes, lastPulledAt }) => {
-      const { error } = await supabase.rpc('push_changes', {
-        changes,
-        last_pulled_at: lastPulledAt,
-      });
-
-      if (error) {
-        throw new Error(error.message);
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'entry_signals' },
+      (payload) => {
+        console.log('Realtime change detected in entry_signals:', payload);
+        sync();
       }
-    },
-    // Migrations are not configured for the local database yet, so we disable
-    // migration-based sync. This avoids WatermelonDB's
-    // "[Sync] Migration syncs cannot be enabled on a database that does not support migrations"
-    // diagnostic error.
-  });
+    )
+    .subscribe((status) => {
+      console.log('Realtime subscription status:', status);
+    });
+
+  return () => {
+    if (subscription) {
+      console.log('Cleaning up realtime subscription');
+      supabase.removeChannel(subscription);
+      subscription = null;
+    }
+  };
 }

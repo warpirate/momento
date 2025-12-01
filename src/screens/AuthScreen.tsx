@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 
 import {supabase} from '../lib/supabaseClient';
+import {Logo} from '../components/ui/Logo';
 
 // Use a single default export for the screen component to avoid any ambiguity
 // when importing it into the navigation tree.
@@ -55,6 +56,9 @@ export default function AuthScreen() {
       style={styles.safeArea}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={styles.card}>
+        <View style={styles.logoContainer}>
+          <Logo size="large" />
+        </View>
         <Text style={styles.heading}>Momento</Text>
         <Text style={styles.subtitle}>Sign {mode === 'signup' ? 'up' : 'in'} to continue</Text>
         <TextInput
@@ -140,5 +144,9 @@ const styles = StyleSheet.create({
   },
   secondaryLabel: {
     color: '#94A3B8',
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
   },
 });

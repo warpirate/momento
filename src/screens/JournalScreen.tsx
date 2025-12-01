@@ -18,7 +18,7 @@ import { EntryPreview, EntryPreviewCard } from '../components/EntryPreviewCard';
 import { OnThisDayCard } from '../components/OnThisDayCard';
 import { database } from '../db';
 import Entry from '../db/model/Entry';
-import { sync } from '../lib/sync';
+import { sync, setupRealtimeSubscription } from '../lib/sync';
 import { supabase } from '../lib/supabaseClient';
 import { calculateStreak } from '../lib/streaks';
 import { useTheme } from '../theme/theme';
@@ -39,6 +39,7 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [syncInitialized, setSyncInitialized] = useState(false);
 
   const draftKey = useMemo(() => `momento:draft:${userId}`, [userId]);
 
@@ -55,8 +56,15 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
   }, [draft, draftKey]);
 
   useEffect(() => {
-    sync().catch(err => console.warn('Sync failed:', err));
-  }, []);
+    if (!syncInitialized && userId) {
+      setSyncInitialized(true);
+      sync().catch(err => console.warn('Initial sync failed:', err));
+      const unsubscribe = setupRealtimeSubscription(userId);
+      return () => {
+        unsubscribe();
+      };
+    }
+  }, [userId, syncInitialized]);
 
   async function refresh() {
     setRefreshing(true);
@@ -78,17 +86,17 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
     setSaving(true);
 
     try {
-      await database.write(async () => {
-        const newEntry = await database.get<Entry>('entries').create(entry => {
+      const newEntry = await database.write(async () => {
+        return await database.get<Entry>('entries').create(entry => {
           entry.content = trimmed;
           entry.userId = userId;
         });
-        
-        sync().then(() => {
-           supabase.functions.invoke('analyze-entry', {
-              body: { record: { id: newEntry.id, content: newEntry.content } }
-           }).then(() => sync());
-        });
+      });
+
+      sync().then(() => {
+        supabase.functions.invoke('analyze-entry', {
+          body: { record: { id: newEntry.id, content: newEntry.content } },
+        }).then(() => sync());
       });
 
       setDraft('');

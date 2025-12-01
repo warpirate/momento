@@ -6,6 +6,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { ScreenLayout } from '../components/ui/ScreenLayout';
 import { Typography } from '../components/ui/Typography';
+import { Logo } from '../components/ui/Logo';
 import { useTheme } from '../theme/theme';
 
 export default function SettingsScreen() {
@@ -41,6 +42,7 @@ export default function SettingsScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Typography color={colors.primary}>← Back</Typography>
         </TouchableOpacity>
+        <Logo size="small" />
         <Typography variant="heading">Settings</Typography>
       </View>
 
