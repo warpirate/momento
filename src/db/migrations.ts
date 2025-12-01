@@ -1,6 +1,7 @@
-import { migrations } from '@nozbe/watermelondb/Schema';
+import { schemaMigrations } from '@nozbe/watermelondb/Schema/migrations';
 
-export default migrations([
+export default schemaMigrations({
+  migrations: [
   {
     // Version 2: Add mood field to entry_signals
     toVersion: 2,
@@ -14,4 +15,5 @@ export default migrations([
       },
     ],
   },
-]);
+  ],
+});
