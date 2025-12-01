@@ -1,4 +1,10 @@
 {
   "extends": "@react-native/typescript-config/tsconfig.json",
-  "include": ["src", "App.tsx"]
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "skipLibCheck": true
+  },
+  "include": ["src", "App.tsx"],
+  "exclude": ["supabase"]
 }

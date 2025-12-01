@@ -1,39 +1,42 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, {useEffect, useMemo, useState} from 'react';
+import { withObservables } from '@nozbe/watermelondb/react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
-  SafeAreaView,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../navigation/types';
 
-import {EntryComposer} from '../components/EntryComposer';
-import {EntryPreview, EntryPreviewCard} from '../components/EntryPreviewCard';
-import {supabase} from '../lib/supabaseClient';
+import { EntryComposer } from '../components/EntryComposer';
+import { EntryPreview, EntryPreviewCard } from '../components/EntryPreviewCard';
+import { OnThisDayCard } from '../components/OnThisDayCard';
+import { database } from '../db';
+import Entry from '../db/model/Entry';
+import { sync } from '../lib/sync';
+import { supabase } from '../lib/supabaseClient';
+import { calculateStreak } from '../lib/streaks';
+import { useTheme } from '../theme/theme';
+import { ScreenLayout } from '../components/ui/ScreenLayout';
+import { Typography } from '../components/ui/Typography';
+import { Button } from '../components/ui/Button';
+import { Card } from '../components/ui/Card';
 
 type JournalScreenProps = {
   userId: string;
+  entries: Entry[];
 };
 
-type EntryRow = {
-  id: string;
-  content: string;
-  created_at: string;
-  entry_signals: {
-    mood?: string;
-    activities?: string[];
-    people?: string[];
-  }[];
-};
-
-export function JournalScreen({userId}: JournalScreenProps) {
+function JournalScreen({ userId, entries }: JournalScreenProps) {
+  console.log('Render JournalScreen with entries:', entries.length);
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { colors, spacing } = useTheme();
   const [draft, setDraft] = useState('');
-  const [entries, setEntries] = useState<EntryPreview[]>([]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -52,47 +55,18 @@ export function JournalScreen({userId}: JournalScreenProps) {
   }, [draft, draftKey]);
 
   useEffect(() => {
-    let isMounted = true;
-    async function loadEntries() {
-      setLoading(true);
-      const {data, error} = await supabase
-        .from('entries')
-        .select('id, content, created_at, entry_signals(mood, activities, people)')
-        .order('created_at', {ascending: false})
-        .limit(20);
-
-      if (error) {
-        if (isMounted) {
-          Alert.alert('Error fetching entries', error.message);
-          setLoading(false);
-        }
-        return;
-      }
-
-      if (isMounted && data) {
-        setEntries(data.map(transformEntry));
-        setLoading(false);
-      }
-    }
-    loadEntries();
-    return () => {
-      isMounted = false;
-    };
-  }, [userId]);
+    sync().catch(err => console.warn('Sync failed:', err));
+  }, []);
 
   async function refresh() {
     setRefreshing(true);
-    const {data, error} = await supabase
-      .from('entries')
-      .select('id, content, created_at, entry_signals(mood, activities, people)')
-      .order('created_at', {ascending: false})
-      .limit(20);
-    if (error) {
-      Alert.alert('Refresh failed', error.message);
-    } else if (data) {
-      setEntries(data.map(transformEntry));
+    try {
+      await sync();
+    } catch (error) {
+      console.warn('Manual sync failed:', error);
+    } finally {
+      setRefreshing(false);
     }
-    setRefreshing(false);
   }
 
   async function handleSave() {
@@ -102,22 +76,28 @@ export function JournalScreen({userId}: JournalScreenProps) {
       return;
     }
     setSaving(true);
-    const {data, error} = await supabase
-      .from('entries')
-      .insert({content: trimmed, user_id: userId})
-      .select('id, content, created_at, entry_signals(mood, activities, people)')
-      .single();
 
-    if (error) {
-      Alert.alert('Save failed', error.message);
+    try {
+      await database.write(async () => {
+        const newEntry = await database.get<Entry>('entries').create(entry => {
+          entry.content = trimmed;
+          entry.userId = userId;
+        });
+        
+        sync().then(() => {
+           supabase.functions.invoke('analyze-entry', {
+              body: { record: { id: newEntry.id, content: newEntry.content } }
+           }).then(() => sync());
+        });
+      });
+
+      setDraft('');
+      await AsyncStorage.removeItem(draftKey);
+    } catch (error) {
+      Alert.alert('Save failed', (error as Error).message);
+    } finally {
       setSaving(false);
-      return;
     }
-
-    setEntries(prev => [transformEntry(data as EntryRow), ...prev]);
-    setDraft('');
-    await AsyncStorage.removeItem(draftKey);
-    setSaving(false);
   }
 
   const emptyState = useMemo(
@@ -129,69 +109,113 @@ export function JournalScreen({userId}: JournalScreenProps) {
     [],
   );
 
-  const showEmpty = !loading && entries.length === 0;
+  const showEmpty = entries.length === 0;
+  const streak = useMemo(() => calculateStreak(entries.map(e => e.createdAt)), [entries]);
+
+  const onThisDayEntry = useMemo(() => {
+    const today = new Date();
+    return entries.find(entry => {
+      const date = entry.createdAt;
+      return (
+        date.getDate() === today.getDate() &&
+        date.getMonth() === today.getMonth() &&
+        date.getFullYear() !== today.getFullYear()
+      );
+    });
+  }, [entries]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <Text style={styles.heading}>Momento</Text>
-        <Text style={styles.subheading}>Journal first. Insights later.</Text>
+    <ScreenLayout>
+      <View style={[styles.container, { padding: spacing.m }]}>
+        <View style={styles.headerRow}>
+          <View>
+            <Typography variant="heading">Momento</Typography>
+            <Typography variant="body">Journal first. Insights later.</Typography>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+            {streak > 0 && (
+              <View style={[styles.streakBadge, { backgroundColor: colors.secondary + '20', borderColor: colors.secondary }]}>
+                <Typography variant="label" color={colors.secondary}>🔥 {streak}</Typography>
+              </View>
+            )}
+            <TouchableOpacity
+              style={[styles.settingsButton, { backgroundColor: colors.surface, borderColor: colors.surfaceHighlight }]}
+              onPress={() => navigation.navigate('Settings')}
+            >
+              <Typography variant="body">⚙️</Typography>
+            </TouchableOpacity>
+          </View>
+        </View>
+        
         <EntryComposer value={draft} onChangeText={setDraft} />
 
-        <TouchableOpacity
-          style={[styles.primaryButton, saving && styles.primaryButtonDisabled]}
-          onPress={handleSave}
-          disabled={saving}>
-          <Text style={styles.primaryButtonLabel}>{saving ? 'Saving…' : 'Save entry'}</Text>
-        </TouchableOpacity>
+        <Button 
+          title={saving ? 'Saving…' : 'Save entry'} 
+          onPress={handleSave} 
+          loading={saving}
+          disabled={saving}
+          style={{ marginTop: spacing.m }}
+        />
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent entries</Text>
-          <Text style={styles.sectionMeta}>Auto-tagged · Private by default</Text>
+        {onThisDayEntry && (
+          <OnThisDayCard
+            entry={onThisDayEntry}
+            yearsAgo={new Date().getFullYear() - onThisDayEntry.createdAt.getFullYear()}
+          />
+        )}
+
+        <View style={[styles.sectionHeader, { marginTop: spacing.l }]}>
+          <Typography variant="subheading">Recent entries</Typography>
+          <Typography variant="caption">Auto-tagged · Private by default</Typography>
         </View>
 
-        {loading ? (
-          <ActivityIndicator color="#A4BCFD" />
-        ) : showEmpty ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>{emptyState.title}</Text>
-            <Text style={styles.emptySubtitle}>{emptyState.subtitle}</Text>
-          </View>
+        {showEmpty ? (
+          <Card style={styles.emptyCard} padding="large">
+            <Typography variant="subheading" style={{ marginBottom: 8 }}>{emptyState.title}</Typography>
+            <Typography variant="body">{emptyState.subtitle}</Typography>
+          </Card>
         ) : (
           <FlatList
             data={entries}
             keyExtractor={item => item.id}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[styles.listContent, { paddingBottom: spacing.xl }]}
             showsVerticalScrollIndicator={false}
             refreshing={refreshing}
             onRefresh={refresh}
-            renderItem={({item}) => <EntryPreviewCard item={item} />}
+            renderItem={({ item }) => (
+              <TouchableOpacity onPress={() => navigation.navigate('EntryDetail', { entryId: item.id })}>
+                <EnhancedEntryPreviewCard entry={item} />
+              </TouchableOpacity>
+            )}
           />
         )}
       </View>
-    </SafeAreaView>
+    </ScreenLayout>
   );
 }
 
-function transformEntry(row: EntryRow): EntryPreview {
-  const latestSignal = row.entry_signals?.[0];
+const EnhancedEntryPreviewCard = withObservables(['entry'], ({ entry }: { entry: Entry }) => ({
+  entry,
+  signals: entry.signals,
+}))(({ entry, signals }: { entry: Entry; signals: any[] }) => {
+  
+  const latestSignal = signals.length > 0 ? signals[0] : null;
   const tags: string[] = [];
-  if (latestSignal?.mood) {
-    tags.push(latestSignal.mood);
-  }
-  if (Array.isArray(latestSignal?.activities)) {
-    tags.push(...latestSignal.activities.slice(0, 2));
-  }
-  return {
-    id: row.id,
-    content: row.content,
-    createdAt: formatTimestamp(row.created_at),
+  if (latestSignal?.mood) tags.push(latestSignal.mood);
+  if (Array.isArray(latestSignal?.activities)) tags.push(...latestSignal.activities.slice(0, 2));
+
+  const item: EntryPreview = {
+    id: entry.id,
+    content: entry.content,
+    createdAt: formatTimestamp(entry.createdAt),
     tags: tags.length ? tags.slice(0, 2) : undefined,
   };
-}
 
-function formatTimestamp(value: string) {
-  const date = new Date(value);
+  return <EntryPreviewCard item={item} />;
+});
+
+
+function formatTimestamp(date: Date) {
   const now = new Date();
 
   const isToday =
@@ -200,7 +224,7 @@ function formatTimestamp(value: string) {
     date.getFullYear() === now.getFullYear();
 
   if (isToday) {
-    return `Today · ${date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}`;
+    return `Today · ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   }
 
   const yesterday = new Date(now);
@@ -211,7 +235,7 @@ function formatTimestamp(value: string) {
     date.getFullYear() === yesterday.getFullYear();
 
   if (isYesterday) {
-    return `Yesterday · ${date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}`;
+    return `Yesterday · ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   }
 
   return date.toLocaleDateString([], {
@@ -223,74 +247,58 @@ function formatTimestamp(value: string) {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#030712',
-  },
   container: {
     flex: 1,
-    padding: 20,
-    gap: 20,
+    gap: 16,
   },
-  heading: {
-    color: '#F8FAFC',
-    fontSize: 32,
-    fontWeight: '700',
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
   },
-  subheading: {
-    color: '#98A2B3',
-    fontSize: 16,
+  streakBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  settingsButton: {
+    padding: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sectionHeader: {
-    marginTop: 4,
-  },
-  primaryButton: {
-    backgroundColor: '#2563EB',
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  primaryButtonDisabled: {
-    opacity: 0.6,
-  },
-  primaryButtonLabel: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  sectionTitle: {
-    color: '#E4E7EC',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  sectionMeta: {
-    color: '#98A2B3',
-    fontSize: 13,
-    marginTop: 2,
+    marginBottom: 12,
   },
   listContent: {
     gap: 12,
-    paddingBottom: 24,
   },
   emptyCard: {
-    padding: 20,
-    borderRadius: 16,
-    backgroundColor: '#101828',
-    borderWidth: 1,
-    borderColor: '#1F2933',
-    gap: 8,
-  },
-  emptyTitle: {
-    color: '#E4E7EC',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  emptySubtitle: {
-    color: '#98A2B3',
-    fontSize: 15,
-    lineHeight: 22,
+    marginTop: 20,
   },
 });
 
-export default JournalScreen;
+const enhance = withObservables(['userId'], ({ userId }) => ({
+  entries: database.get<Entry>('entries').query().observe(),
+}));
 
+import { Session } from '@supabase/supabase-js';
+
+export default function JournalScreenWrapper() {
+  console.log('Render JournalScreenWrapper');
+  const [session, setSession] = useState<Session | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+    });
+  }, []);
+
+  if (!session?.user) return <View style={{ flex: 1, justifyContent: 'center' }}><ActivityIndicator /></View>;
+
+  const EnhancedJournalScreen = enhance(JournalScreen);
+  return <EnhancedJournalScreen userId={session.user.id} />;
+}

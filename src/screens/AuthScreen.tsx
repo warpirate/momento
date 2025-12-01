@@ -12,7 +12,10 @@ import {
 
 import {supabase} from '../lib/supabaseClient';
 
-export function AuthScreen() {
+// Use a single default export for the screen component to avoid any ambiguity
+// when importing it into the navigation tree.
+export default function AuthScreen() {
+  console.log('Render AuthScreen');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -139,6 +142,3 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
   },
 });
-
-export default AuthScreen;
-

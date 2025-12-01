@@ -1,5 +1,7 @@
 import React from 'react';
-import {StyleSheet, Text, TextInput, View} from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
+import { useTheme } from '../theme/theme';
+import { Typography } from './ui/Typography';
 
 type EntryComposerProps = {
   value: string;
@@ -14,15 +16,25 @@ export function EntryComposer({
   placeholder = 'What’s on your mind?',
   characterLimit = 4000,
 }: EntryComposerProps) {
+  const { colors, spacing, borderRadius, typography } = useTheme();
   const remaining = characterLimit - value.length;
   const limitReached = remaining <= 0;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { 
+      backgroundColor: colors.surface,
+      borderColor: colors.surfaceHighlight,
+      borderRadius: borderRadius.l,
+      padding: spacing.m,
+    }]}>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { 
+          color: colors.textPrimary,
+          fontSize: typography.body.fontSize,
+          lineHeight: typography.body.lineHeight,
+        }]}
         placeholder={placeholder}
-        placeholderTextColor="#98A2B3"
+        placeholderTextColor={colors.textMuted}
         multiline
         textAlignVertical="top"
         autoCorrect
@@ -31,10 +43,15 @@ export function EntryComposer({
         onChangeText={onChangeText}
       />
       <View style={styles.metaRow}>
-        <Text style={styles.metaLabel}>Autosave enabled · Offline friendly</Text>
-        <Text style={[styles.counter, limitReached && styles.counterExceeded]}>
+        <Typography variant="caption" color={colors.textMuted}>
+          Autosave enabled
+        </Typography>
+        <Typography 
+          variant="caption" 
+          color={limitReached ? colors.error : colors.textMuted}
+        >
           {remaining} chars left
-        </Text>
+        </Typography>
       </View>
     </View>
   );
@@ -42,37 +59,19 @@ export function EntryComposer({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#1F2933',
-    backgroundColor: '#0D1117',
-    padding: 16,
     gap: 12,
   },
   input: {
-    minHeight: 160,
-    fontSize: 16,
-    color: '#F8FAFC',
-    lineHeight: 24,
+    minHeight: 120,
     fontFamily: 'System',
+    padding: 0, // Remove default padding to align with container
   },
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  metaLabel: {
-    color: '#98A2B3',
-    fontSize: 13,
-  },
-  counter: {
-    color: '#98A2B3',
-    fontSize: 13,
-  },
-  counterExceeded: {
-    color: '#F97066',
-  },
 });
 
 export default EntryComposer;
-

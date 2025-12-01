@@ -10,8 +10,7 @@ import React, {useEffect, useState} from 'react';
 import {ActivityIndicator, StatusBar, View} from 'react-native';
 
 import {supabase} from './src/lib/supabaseClient';
-import {AuthScreen} from './src/screens/AuthScreen';
-import {JournalScreen} from './src/screens/JournalScreen';
+import {Navigation} from './src/navigation';
 
 function App(): React.JSX.Element {
   const [session, setSession] = useState<Session | null>(null);
@@ -45,7 +44,7 @@ function App(): React.JSX.Element {
   return (
     <>
       <StatusBar barStyle="light-content" />
-      {session?.user ? <JournalScreen userId={session.user.id} /> : <AuthScreen />}
+      <Navigation session={session} />
     </>
   );
 }
