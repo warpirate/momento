@@ -49,14 +49,37 @@ export async function sync() {
       pushChanges: async ({ changes, lastPulledAt }) => {
         console.log('Pushing changes...', { changes, lastPulledAt });
         
+        // Get the current authenticated user ID
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user?.id) {
+          throw new Error('Not authenticated. Cannot push changes.');
+        }
+        const authenticatedUserId = session.user.id;
+        
         console.log('Changes to push details:', JSON.stringify(changes, null, 2));
         
         // Validate UUIDs and fix if needed, and ensure timestamps are integers
+        // NOTE: user_id should NEVER be regenerated - it must match the authenticated user
+        // The server will use auth.uid() anyway, but we ensure consistency here
         const validatedChanges = JSON.parse(JSON.stringify(changes, (key, value) => {
-          if (key === 'id' || key === 'entry_id' || key === 'user_id') {
+          // Only validate 'id' and 'entry_id' - these can be regenerated if invalid
+          if (key === 'id' || key === 'entry_id') {
             if (typeof value === 'string' && !isValidUUID(value)) {
               console.warn(`Invalid UUID detected for ${key}: ${value}. Generating new UUID.`);
               return generateUUID();
+            }
+          }
+          // For user_id, if invalid, use the authenticated user's ID instead of generating a random one
+          // This ensures all entries belong to the correct user account
+          if (key === 'user_id') {
+            if (typeof value === 'string' && !isValidUUID(value)) {
+              console.warn(`Invalid user_id detected: ${value}. Using authenticated user ID: ${authenticatedUserId}`);
+              return authenticatedUserId;
+            }
+            // Even if valid, ensure it matches the authenticated user (server will override anyway, but this prevents confusion)
+            if (typeof value === 'string' && value !== authenticatedUserId) {
+              console.warn(`user_id mismatch. Local: ${value}, Authenticated: ${authenticatedUserId}. Using authenticated user ID.`);
+              return authenticatedUserId;
             }
           }
           // Ensure all timestamp values are integers, not floats
