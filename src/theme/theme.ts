@@ -1,4 +1,4 @@
-import { useColorScheme } from 'react-native';
+import { useThemeContext } from './ThemeContext';
 
 export type ThemeColors = {
   background: string;
@@ -15,17 +15,19 @@ export type ThemeColors = {
 };
 
 export const darkColors: ThemeColors = {
-  background: '#0F172A', // Slate 900
-  surface: '#1E293B', // Slate 800
-  surfaceHighlight: '#334155', // Slate 700
-  textPrimary: '#F8FAFC', // Slate 50
-  textSecondary: '#CBD5E1', // Slate 300
-  textMuted: '#94A3B8', // Slate 400
-  primary: '#8B5CF6', // Violet 500
-  primaryLight: '#A78BFA', // Violet 400
-  secondary: '#10B981', // Emerald 500
-  error: '#EF4444', // Red 500
-  warning: '#F59E0B', // Amber 500
+  // A softer, more “night journal” palette: deep navy background,
+  // slightly warmer surfaces, calm accent colors.
+  background: '#050816', // very deep blue / near-black
+  surface: '#0B1020', // elevated cards / bottom sheets
+  surfaceHighlight: '#181B2A', // outlines, dividers, subtle chips
+  textPrimary: '#F9FAFB', // almost white
+  textSecondary: '#D1D5DB', // soft grey
+  textMuted: '#6B7280', // muted labels / helper text
+  primary: '#7C3AED', // rich violet accent
+  primaryLight: '#A855F7', // lighter violet for hovers / badges
+  secondary: '#22C55E', // gentle green for positive signals
+  error: '#F97373', // softer red
+  warning: '#FBBF24', // warm amber
 };
 
 export const lightColors: ThemeColors = {
@@ -43,13 +45,14 @@ export const lightColors: ThemeColors = {
 };
 
 export const useTheme = () => {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
-  const colors = isDark ? darkColors : lightColors;
+  const { colors, isDark, themeMode, setThemeMode, isLoading } = useThemeContext();
 
   return {
     colors,
     isDark,
+    themeMode,
+    setThemeMode,
+    isLoading,
     spacing: {
       xs: 4,
       s: 8,

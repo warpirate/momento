@@ -10,6 +10,7 @@ import { ScreenLayout } from '../components/ui/ScreenLayout';
 import { Typography } from '../components/ui/Typography';
 import { Card } from '../components/ui/Card';
 import { useTheme } from '../theme/theme';
+import Icon from 'react-native-vector-icons/Feather';
 
 export default function SearchScreen() {
   console.log('Render SearchScreen');
@@ -72,7 +73,12 @@ export default function SearchScreen() {
       <View style={[styles.header, { padding: spacing.m }]}>
         <Typography variant="heading">Search</Typography>
         <View style={[styles.searchBox, { backgroundColor: colors.surface, borderColor: colors.surfaceHighlight, borderRadius: borderRadius.m }]}>
-          <Typography style={styles.searchIcon}>🔍</Typography>
+          <Icon
+            name="search"
+            size={18}
+            color={colors.textMuted}
+            style={styles.searchIcon}
+          />
           <TextInput
             style={[styles.input, { color: colors.textPrimary, fontSize: typography.body.fontSize }]}
             placeholder="Search your journal..."
@@ -83,7 +89,12 @@ export default function SearchScreen() {
           />
           {query.length > 0 && (
             <TouchableOpacity onPress={() => setQuery('')}>
-              <Typography style={styles.clearIcon} color={colors.textMuted}>✕</Typography>
+              <Icon
+                name="x"
+                size={16}
+                color={colors.textMuted}
+                style={styles.clearIcon}
+              />
             </TouchableOpacity>
           )}
         </View>
@@ -122,16 +133,13 @@ const styles = StyleSheet.create({
     height: 50,
   },
   searchIcon: {
-    fontSize: 16,
     marginRight: 8,
-    opacity: 0.5,
   },
   input: {
     flex: 1,
     height: '100%',
   },
   clearIcon: {
-    fontSize: 16,
     padding: 4,
   },
   listContent: {

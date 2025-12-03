@@ -64,14 +64,20 @@ export default function CalendarScreen() {
   };
 
   const getEntriesForDate = (date: Date) => {
-    return entries.filter(entry => {
-      const entryDate = new Date(entry.createdAt);
-      return (
-        entryDate.getDate() === date.getDate() &&
-        entryDate.getMonth() === date.getMonth() &&
-        entryDate.getFullYear() === date.getFullYear()
+    return entries
+      .filter(entry => {
+        const entryDate = new Date(entry.createdAt);
+        return (
+          entryDate.getDate() === date.getDate() &&
+          entryDate.getMonth() === date.getMonth() &&
+          entryDate.getFullYear() === date.getFullYear()
+        );
+      })
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() -
+          new Date(a.createdAt).getTime(),
       );
-    });
   };
 
   const changeMonth = (increment: number) => {
@@ -156,7 +162,7 @@ export default function CalendarScreen() {
               style={[styles.entryItem, { borderBottomColor: colors.surfaceHighlight }]}
               onPress={() => navigation.navigate('EntryDetail', { entryId: entry.id })}
             >
-              <Typography style={styles.entryTime} color={colors.primaryLight}>
+              <Typography style={styles.entryTime} color={colors.primary}>
                 {new Date(entry.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </Typography>
               <Typography style={styles.entryPreview} numberOfLines={1}>

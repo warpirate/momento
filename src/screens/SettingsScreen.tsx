@@ -7,12 +7,13 @@ import { RootStackParamList } from '../navigation/types';
 import { ScreenLayout } from '../components/ui/ScreenLayout';
 import { Typography } from '../components/ui/Typography';
 import { Logo } from '../components/ui/Logo';
+import { ThemeToggle } from '../components/ui/ThemeToggle';
 import { useTheme } from '../theme/theme';
 
 export default function SettingsScreen() {
   console.log('Render SettingsScreen');
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { colors, spacing, borderRadius } = useTheme();
+  const { colors, spacing, borderRadius, themeMode, setThemeMode } = useTheme();
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
@@ -62,7 +63,17 @@ export default function SettingsScreen() {
 
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.surfaceHighlight, borderRadius: borderRadius.l }]}>
           <Typography variant="label" color={colors.textMuted} style={styles.sectionTitle}>APP</Typography>
-          <SettingItem label="Theme" onPress={() => Alert.alert('Coming soon')} />
+          <View style={styles.themeSection}>
+            <Typography variant="body" color={colors.textPrimary} style={styles.themeLabel}>
+              Theme
+            </Typography>
+            <Typography variant="caption" color={colors.textMuted} style={styles.themeDescription}>
+              Choose your preferred theme appearance
+            </Typography>
+            <View style={styles.themeToggleContainer}>
+              <ThemeToggle value={themeMode} onValueChange={setThemeMode} />
+            </View>
+          </View>
           <SettingItem label="About Momento" onPress={() => Alert.alert('Momento v0.0.1')} />
         </View>
 
@@ -96,6 +107,22 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 8,
     letterSpacing: 1,
+  },
+  themeSection: {
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  themeLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  themeDescription: {
+    fontSize: 13,
+    marginBottom: 16,
+  },
+  themeToggleContainer: {
+    alignSelf: 'stretch',
   },
   item: {
     flexDirection: 'row',

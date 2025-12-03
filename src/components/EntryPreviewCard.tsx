@@ -1,7 +1,6 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTheme } from '../theme/theme';
-import { Card } from './ui/Card';
 import { Typography } from './ui/Typography';
 
 export type EntryPreview = {
@@ -20,9 +19,9 @@ export function EntryPreviewCard({ item }: EntryPreviewCardProps) {
   const previewText = item.content.trim();
 
   return (
-    <Card variant="elevated" style={styles.card}>
+    <View style={styles.card}>
       <View style={styles.headerRow}>
-        <Typography variant="caption" color={colors.textMuted}>
+        <Typography variant="caption" color={colors.primary}>
           {item.createdAt}
         </Typography>
         {item.tags && item.tags.length > 0 && (
@@ -40,19 +39,15 @@ export function EntryPreviewCard({ item }: EntryPreviewCardProps) {
       <Typography variant="body" numberOfLines={4} style={styles.excerpt}>
         {previewText}
       </Typography>
-    </Card>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    marginBottom: 12,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    marginHorizontal: 1,
+    marginBottom: 6,
+    paddingVertical: 12,
   },
   tagsContainer: {
     flexDirection: 'row',
@@ -69,6 +64,13 @@ const styles = StyleSheet.create({
   },
   excerpt: {
     lineHeight: 22,
+    marginTop: 4,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
   },
 });
 

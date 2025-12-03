@@ -11,20 +11,22 @@ interface RequestBody {
   };
 }
 
-interface GeminiResponse {
-  candidates: Array<{
-    content: {
-      parts: Array<{ text: string }>;
-    };
-  }>;
-}
-
 interface AnalysisResult {
   mood: string;
   activities: string[];
   people: string[];
   sentiment_score: number;
   tags: string[];
+}
+
+// Nebius returns OpenAI-compatible responses. We only care about the first choice.
+interface NebiusChatCompletion {
+  choices?: Array<{
+    message?: {
+      content?: string;
+    };
+  }>;
+  error?: { message?: string };
 }
 
 const corsHeaders = {
@@ -41,55 +43,52 @@ serve(async (req: Request) => {
   try {
     const { record } = (await req.json()) as RequestBody;
     const entryId = record?.id;
-    const content = record?.content;
+    const content = record?.content ?? '';
 
-    if (!content || !entryId) {
+    if (!content.trim() || !entryId) {
       throw new Error('Missing content or entry ID');
     }
 
-    // 1. Call Gemini API
-    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-    if (!geminiApiKey) {
-      throw new Error('Missing GEMINI_API_KEY environment variable');
+    // 1. Call Nebius (OpenAI-compatible) chat completions API
+    const nebiusApiKey = Deno.env.get('NEBIUS_API_KEY');
+    if (!nebiusApiKey) {
+      throw new Error('Missing NEBIUS_API_KEY environment variable');
     }
 
-    const prompt = `
-      Analyze the following journal entry and extract structured data.
-      Return ONLY a valid JSON object with no markdown formatting.
-      
-      Entry: "${content}"
-      
-      JSON Structure:
-      {
-        "mood": "string (e.g., Happy, Anxious, Tired, Excited)",
-        "activities": ["string", "string"],
-        "people": ["string", "string"],
-        "sentiment_score": number (-1.0 to 1.0),
-        "tags": ["string", "string"]
-      }
-    `;
+    const systemPrompt =
+      'You are an analysis engine for a journaling app. You MUST return ONLY valid JSON, no markdown, no prose.';
 
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${geminiApiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-        }),
-      }
-    );
+    const userPrompt = `Analyze the following journal entry and extract structured data.\nReturn ONLY a valid JSON object with no markdown formatting.\n\nEntry: "${content}"\n\nJSON Structure:\n{\n  "mood": "string (e.g., Happy, Anxious, Tired, Excited)",\n  "activities": ["string", "string"],\n  "people": ["string", "string"],\n  "sentiment_score": number (-1.0 to 1.0),\n  "tags": ["string", "string"]\n}`;
 
-    const geminiData = (await geminiResponse.json()) as GeminiResponse;
-    
-    if (!geminiData.candidates?.[0]?.content?.parts?.[0]?.text) {
-      console.error('Gemini Error:', JSON.stringify(geminiData));
-      throw new Error('Failed to get valid response from Gemini');
+    const nebiusResponse = await fetch('https://api.tokenfactory.nebius.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${nebiusApiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'openai/gpt-oss-20b',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+    });
+
+    const nebiusData = (await nebiusResponse.json()) as NebiusChatCompletion;
+
+    if (!nebiusResponse.ok) {
+      console.error('Nebius error response:', JSON.stringify(nebiusData));
+      throw new Error(nebiusData.error?.message || `Nebius request failed with status ${nebiusResponse.status}`);
     }
 
-    const textResponse = geminiData.candidates[0].content.parts[0].text;
-    
-    // Clean up potential markdown code blocks if Gemini adds them
+    const textResponse = nebiusData.choices?.[0]?.message?.content;
+    if (!textResponse) {
+      console.error('Nebius missing content:', JSON.stringify(nebiusData));
+      throw new Error('Failed to get valid response from Nebius');
+    }
+
+    // Clean up potential markdown code blocks if the model adds them
     const jsonString = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
     const analysis = JSON.parse(jsonString) as AnalysisResult;
 

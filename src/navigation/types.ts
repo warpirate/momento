@@ -6,6 +6,7 @@ export type RootStackParamList = {
   EntryDetail: { entryId: string };
   Settings: undefined;
   Profile: undefined;
+  RecentEntries: undefined;
 };
 
 export type MainTabParamList = {

@@ -12,6 +12,8 @@ import { ScreenLayout } from '../components/ui/ScreenLayout';
 import { Typography } from '../components/ui/Typography';
 import { Card } from '../components/ui/Card';
 import { useTheme } from '../theme/theme';
+import Icon from 'react-native-vector-icons/Feather';
+import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 type ProfileStats = {
   totalEntries: number;
@@ -120,8 +122,15 @@ export default function ProfileScreen() {
             </View>
 
             <View style={[styles.streakBadge, { backgroundColor: colors.background, borderColor: colors.secondary }]}>
-              <Typography style={styles.streakEmoji}>🔥</Typography>
-              <Typography style={styles.streakCount} color={colors.secondary}>{stats.currentStreak}</Typography>
+              <MaterialCommunityIcon
+                name="fire"
+                size={14}
+                color={colors.error}
+                style={styles.streakIcon}
+              />
+              <Typography style={styles.streakCount} color={colors.secondary}>
+                {stats.currentStreak}
+              </Typography>
             </View>
           </View>
 
@@ -224,8 +233,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
   },
-  streakEmoji: {
-    fontSize: 14,
+  streakIcon: {
     marginRight: 2,
   },
   streakCount: {

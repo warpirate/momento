@@ -26,6 +26,10 @@ import { ScreenLayout } from '../components/ui/ScreenLayout';
 import { Typography } from '../components/ui/Typography';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
+import Icon from 'react-native-vector-icons/Feather';
+import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { JOURNAL_QUOTES } from '../content/quotes';
+import { useSyncContext } from '../lib/SyncContext';
 
 type JournalScreenProps = {
   userId: string;
@@ -40,6 +44,7 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [syncInitialized, setSyncInitialized] = useState(false);
+  const { markHasUnsyncedEntries } = useSyncContext();
 
   const draftKey = useMemo(() => `momento:draft:${userId}`, [userId]);
 
@@ -93,6 +98,9 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
         });
       });
 
+      // Mark that we have local changes that need to be synced and analyzed.
+      markHasUnsyncedEntries();
+
       sync().then(() => {
         supabase.functions.invoke('analyze-entry', {
           body: { record: { id: newEntry.id, content: newEntry.content } },
@@ -117,12 +125,23 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
     [],
   );
 
-  const showEmpty = entries.length === 0;
-  const streak = useMemo(() => calculateStreak(entries.map(e => e.createdAt)), [entries]);
+  const sortedEntries = useMemo(
+    () =>
+      [...entries].sort(
+        (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+      ),
+    [entries],
+  );
+
+  const showEmpty = sortedEntries.length === 0;
+  const streak = useMemo(
+    () => calculateStreak(sortedEntries.map(e => e.createdAt)),
+    [sortedEntries],
+  );
 
   const onThisDayEntry = useMemo(() => {
     const today = new Date();
-    return entries.find(entry => {
+    return sortedEntries.find(entry => {
       const date = entry.createdAt;
       return (
         date.getDate() === today.getDate() &&
@@ -130,7 +149,12 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
         date.getFullYear() !== today.getFullYear()
       );
     });
-  }, [entries]);
+  }, [sortedEntries]);
+
+  const quote = useMemo(
+    () => JOURNAL_QUOTES[Math.floor(Math.random() * JOURNAL_QUOTES.length)],
+    [],
+  );
 
   return (
     <ScreenLayout>
@@ -142,15 +166,40 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
           </View>
           <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
             {streak > 0 && (
-              <View style={[styles.streakBadge, { backgroundColor: colors.secondary + '20', borderColor: colors.secondary }]}>
-                <Typography variant="label" color={colors.secondary}>🔥 {streak}</Typography>
+              <View
+                style={[
+                  styles.streakBadge,
+                  {
+                    backgroundColor: colors.secondary + '20',
+                    borderColor: colors.secondary,
+                  },
+                ]}
+              >
+                <MaterialCommunityIcon
+                  name="fire"
+                  size={14}
+                  color={colors.error}
+                />
+                <Typography
+                  variant="label"
+                  color={colors.secondary}
+                  style={{ marginLeft: 4 }}
+                >
+                  {streak}
+                </Typography>
               </View>
             )}
             <TouchableOpacity
-              style={[styles.settingsButton, { backgroundColor: colors.surface, borderColor: colors.surfaceHighlight }]}
+              style={[
+                styles.settingsButton,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.surfaceHighlight,
+                },
+              ]}
               onPress={() => navigation.navigate('Settings')}
             >
-              <Typography variant="body">⚙️</Typography>
+              <Icon name="settings" size={18} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
         </View>
@@ -168,35 +217,42 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
         {onThisDayEntry && (
           <OnThisDayCard
             entry={onThisDayEntry}
-            yearsAgo={new Date().getFullYear() - onThisDayEntry.createdAt.getFullYear()}
+            yearsAgo={
+              new Date().getFullYear() - onThisDayEntry.createdAt.getFullYear()
+            }
           />
         )}
 
-        <View style={[styles.sectionHeader, { marginTop: spacing.l }]}>
-          <Typography variant="subheading">Recent entries</Typography>
-          <Typography variant="caption">Auto-tagged · Private by default</Typography>
+        <View style={styles.quoteCard}>
+          <Typography
+            variant="body"
+            align="center"
+            style={{ marginBottom: 8 }}
+          >
+            “{quote.text}”
+          </Typography>
+          <Typography variant="caption" align="center">
+            — {quote.author}
+          </Typography>
         </View>
 
-        {showEmpty ? (
-          <Card style={styles.emptyCard} padding="large">
-            <Typography variant="subheading" style={{ marginBottom: 8 }}>{emptyState.title}</Typography>
-            <Typography variant="body">{emptyState.subtitle}</Typography>
-          </Card>
-        ) : (
-          <FlatList
-            data={entries}
-            keyExtractor={item => item.id}
-            contentContainerStyle={[styles.listContent, { paddingBottom: spacing.xl }]}
-            showsVerticalScrollIndicator={false}
-            refreshing={refreshing}
-            onRefresh={refresh}
-            renderItem={({ item }) => (
-              <TouchableOpacity onPress={() => navigation.navigate('EntryDetail', { entryId: item.id })}>
-                <EnhancedEntryPreviewCard entry={item} />
-              </TouchableOpacity>
-            )}
-          />
-        )}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          style={[
+            styles.recentEntriesButton,
+            {
+              borderColor: colors.primary,
+            },
+          ]}
+          onPress={() => navigation.navigate('RecentEntries')}
+        >
+          <Typography variant="subheading" color={colors.primary}>
+            Recent entries
+          </Typography>
+          <Typography variant="subheading" color={colors.primary}>
+            →
+          </Typography>
+        </TouchableOpacity>
       </View>
     </ScreenLayout>
   );
@@ -270,6 +326,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   settingsButton: {
     padding: 8,
@@ -281,11 +339,21 @@ const styles = StyleSheet.create({
   sectionHeader: {
     marginBottom: 12,
   },
-  listContent: {
-    gap: 12,
+  quoteCard: {
+    marginTop: 32,
+    paddingHorizontal: 24,
+    paddingVertical: 32,
+    borderRadius: 24,
   },
-  emptyCard: {
-    marginTop: 20,
+  recentEntriesButton: {
+    marginTop: 32,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
 });
 
