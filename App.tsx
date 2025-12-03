@@ -15,6 +15,7 @@ import {Logo} from './src/components/ui/Logo';
 import {ThemeProvider} from './src/theme/ThemeContext';
 import {useTheme} from './src/theme/theme';
 import { SyncProvider } from './src/lib/SyncContext';
+import { AlertProvider } from './src/context/AlertContext';
 
 function AppContent(): React.JSX.Element {
   const [session, setSession] = useState<Session | null>(null);
@@ -58,9 +59,11 @@ function AppContent(): React.JSX.Element {
 function App(): React.JSX.Element {
   return (
     <ThemeProvider>
-      <SyncProvider>
-        <AppContent />
-      </SyncProvider>
+      <AlertProvider>
+        <SyncProvider>
+          <AppContent />
+        </SyncProvider>
+      </AlertProvider>
     </ThemeProvider>
   );
 }

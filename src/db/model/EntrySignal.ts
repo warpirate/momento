@@ -20,8 +20,14 @@ export default class EntrySignal extends Model {
   @json('tags', sanitize) tags!: string[];
   @date('created_at') createdAt!: Date;
 
-  // Use centralized UUID generation
+  // Generate UUID based on entry ID for consistency
   static async generateId() {
+    // EntrySignal IDs are generated in Supabase, but we'll use random UUIDs for local cache
     return generateUUID();
+  }
+  
+  // Helper method to generate UUID with entry context
+  static generateIdWithEntry(entryId: string) {
+    return generateUUID(entryId);
   }
 }

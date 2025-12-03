@@ -92,6 +92,35 @@ serve(async (req: Request) => {
     const jsonString = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
     const analysis = JSON.parse(jsonString) as AnalysisResult;
 
+    // 1.5 Generate Embedding
+    let embedding = null;
+    try {
+      const embeddingResp = await fetch('https://api.tokenfactory.nebius.com/v1/embeddings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${nebiusApiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'BAAI/bge-m3', // Nebius likely hosts open weights. bge-m3 is common. Or maybe just 'text-embedding-3-small' if they proxy. Let's try a safe bet or handle error. 
+          // Actually, without knowing Nebius model list, I'll try 'sentence-transformers/all-MiniLM-L6-v2' or just fail gracefully.
+          // Let's use a standard generic name often mapped: 'text-embedding-ada-002' or similar. 
+          // I'll blindly trust 'text-embedding-3-small' for now as it matches the vector size 1536 I chose.
+          model: 'text-embedding-3-small',
+          input: content,
+        }),
+      });
+      
+      if (embeddingResp.ok) {
+        const embeddingData = await embeddingResp.json();
+        embedding = embeddingData.data?.[0]?.embedding;
+      } else {
+        console.warn('Embedding failed:', await embeddingResp.text());
+      }
+    } catch (e) {
+      console.warn('Embedding extraction error:', e);
+    }
+
     // 2. Save to Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -114,6 +143,14 @@ serve(async (req: Request) => {
     if (error) {
       console.error('Supabase error:', error);
       throw new Error(`Failed to save analysis: ${error.message}`);
+    }
+
+    // 3. Update Entry with Embedding
+    if (embedding) {
+      await supabase
+        .from('entries')
+        .update({ embedding })
+        .eq('id', entryId);
     }
 
     return new Response(

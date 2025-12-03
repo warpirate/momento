@@ -1,53 +1,42 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import Entry from '../db/model/Entry';
+import { useTheme } from '../theme/theme';
+import { Typography } from './ui/Typography';
+import { Card } from './ui/Card';
+import Icon from 'react-native-vector-icons/Feather';
 
 type OnThisDayCardProps = {
   entry: Entry;
   yearsAgo: number;
+  onPress: () => void;
 };
 
-export function OnThisDayCard({ entry, yearsAgo }: OnThisDayCardProps) {
+export function OnThisDayCard({ entry, yearsAgo, onPress }: OnThisDayCardProps) {
+  const { colors, spacing } = useTheme();
+
   return (
-    <View style={styles.card}>
-      <View style={styles.header}>
-        <Text style={styles.title}>🎉 On This Day</Text>
-        <Text style={styles.subtitle}>{yearsAgo} year{yearsAgo > 1 ? 's' : ''} ago</Text>
-      </View>
-      <Text style={styles.content} numberOfLines={3}>
-        {entry.content}
-      </Text>
-    </View>
+    <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
+      <Card style={{ marginBottom: spacing.m, borderColor: colors.primary, borderWidth: 1 }}>
+        <View style={styles.header}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Icon name="calendar" size={18} color={colors.primary} />
+            <Typography variant="subheading" color={colors.primary}>On This Day</Typography>
+          </View>
+          <Typography variant="caption" color={colors.textMuted}>{yearsAgo} year{yearsAgo > 1 ? 's' : ''} ago</Typography>
+        </View>
+        <Typography variant="body" numberOfLines={3} style={{ marginTop: spacing.s }}>
+          {entry.content}
+        </Typography>
+      </Card>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#1E293B',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
-  },
-  title: {
-    color: '#F8FAFC',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  subtitle: {
-    color: '#94A3B8',
-    fontSize: 13,
-  },
-  content: {
-    color: '#CBD5E1',
-    fontSize: 15,
-    lineHeight: 22,
   },
 });

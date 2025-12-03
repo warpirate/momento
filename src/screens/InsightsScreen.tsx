@@ -38,11 +38,17 @@ export default function InsightsScreen() {
       const activities: Record<string, number> = {};
       let totalSentiment = 0;
       let sentimentCount = 0;
+      entries.forEach(entry => {
+        // Legacy support for manual mood ratings
+        if (entry.moodRating) {
+          moods[entry.moodRating] = (moods[entry.moodRating] || 0) + 1;
+        }
+      });
 
       signals.forEach(signal => {
-        // Moods
+        // AI Moods
         if (signal.mood) {
-          moods[signal.mood] = (moods[signal.mood] || 0) + 1;
+           moods[signal.mood] = (moods[signal.mood] || 0) + 1;
         }
 
         // Activities
@@ -185,6 +191,7 @@ export default function InsightsScreen() {
             )}
           </View>
         </Card>
+
 
         <View style={[styles.row, { gap: spacing.m }]}>
           <Card variant="elevated" style={styles.halfCard}>

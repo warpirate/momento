@@ -14,6 +14,7 @@ import { Card } from '../components/ui/Card';
 import { useTheme } from '../theme/theme';
 import Icon from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { BADGES, getUnlockedBadges } from '../lib/gamification';
 
 type ProfileStats = {
   totalEntries: number;
@@ -35,6 +36,7 @@ export default function ProfileScreen() {
   });
 
   const [session, setSession] = useState<Session | null>(null);
+  const [stealthMode, setStealthMode] = useState(true);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -73,6 +75,7 @@ export default function ProfileScreen() {
   }, []);
 
   const email = session?.user?.email ?? 'Unknown email';
+  const userName = session?.user?.user_metadata?.name || session?.user?.user_metadata?.full_name || email.split('@')[0] || 'User';
 
   const accountCreatedAt = useMemo(() => {
     const created = session?.user?.created_at;
@@ -83,11 +86,21 @@ export default function ProfileScreen() {
   }, [session]);
 
   const initials = useMemo(() => {
-    if (!email) return '?';
-    const namePart = email.split('@')[0] || '';
-    if (!namePart) return '?';
-    return namePart.slice(0, 2).toUpperCase();
-  }, [email]);
+    const nameToUse = userName !== 'User' ? userName : email;
+    if (!nameToUse) return '?';
+    const parts = nameToUse.split(' ');
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    } else {
+      return nameToUse.slice(0, 2).toUpperCase();
+    }
+  }, [userName, email]);
+
+  const obfuscateEmail = (email: string) => {
+    const [localPart, domain] = email.split('@');
+    if (localPart.length <= 2) return `${localPart[0]}*@${domain}`;
+    return `${localPart[0]}${'*'.repeat(localPart.length - 2)}${localPart[localPart.length - 1]}@${domain}`;
+  };
 
   const StatCard = ({
     label,
@@ -105,11 +118,13 @@ export default function ProfileScreen() {
     </Card>
   );
 
+  const unlockedBadges = getUnlockedBadges(stats);
+
   return (
     <ScreenLayout>
       <View style={[styles.header, { padding: spacing.m }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Typography color={colors.primary}>← Back</Typography>
+          <Icon name="arrow-left" size={24} color={colors.primary} />
         </TouchableOpacity>
         <Typography variant="heading">Account</Typography>
       </View>
@@ -135,7 +150,22 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.profileTextBlock}>
-            <Typography variant="subheading">{email}</Typography>
+            <Typography variant="subheading">{userName}</Typography>
+            <View style={styles.emailRow}>
+              <Typography variant="caption" style={styles.emailText}>
+                {stealthMode ? obfuscateEmail(email) : email}
+              </Typography>
+              <TouchableOpacity 
+                onPress={() => setStealthMode(!stealthMode)} 
+                style={styles.stealthButton}
+              >
+                <Icon 
+                  name={stealthMode ? "eye-off" : "eye"} 
+                  size={16} 
+                  color={colors.textMuted} 
+                />
+              </TouchableOpacity>
+            </View>
             <Typography variant="caption">
               {accountCreatedAt
                 ? `Member since ${accountCreatedAt.toLocaleDateString(undefined, {
@@ -164,6 +194,24 @@ export default function ProfileScreen() {
             label="Words Written"
             value={stats.totalWords.toLocaleString()}
           />
+        </View>
+
+        <View style={styles.sectionHeaderRow}>
+          <Typography variant="subheading">Badges</Typography>
+        </View>
+
+        <View style={styles.badgesGrid}>
+          {BADGES.map(badge => {
+            const isUnlocked = unlockedBadges.some(b => b.id === badge.id);
+            return (
+              <View key={badge.id} style={[styles.badgeItem, { opacity: isUnlocked ? 1 : 0.4 }]}>
+                <View style={[styles.badgeIcon, { backgroundColor: isUnlocked ? colors.primary + '20' : colors.surfaceHighlight }]}>
+                  <Icon name={badge.icon} size={24} color={isUnlocked ? colors.primary : colors.textMuted} />
+                </View>
+                <Typography variant="caption" style={{ textAlign: 'center', marginTop: 4 }}>{badge.name}</Typography>
+              </View>
+            );
+          })}
         </View>
 
         <Card style={styles.milestoneCard}>
@@ -243,6 +291,20 @@ const styles = StyleSheet.create({
   profileTextBlock: {
     flex: 1,
   },
+  emailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 2,
+  },
+  emailText: {
+    flex: 1,
+    marginRight: 8,
+  },
+  stealthButton: {
+    padding: 4,
+    borderRadius: 12,
+  },
   sectionHeaderRow: {
     marginTop: 8,
     marginBottom: 4,
@@ -282,6 +344,24 @@ const styles = StyleSheet.create({
   statSubtext: {
     fontSize: 12,
     marginTop: 4,
+  },
+  badgesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+    justifyContent: 'center',
+  },
+  badgeItem: {
+    alignItems: 'center',
+    width: '30%',
+  },
+  badgeIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
   },
   milestoneCard: {
     padding: 20,

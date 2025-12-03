@@ -9,6 +9,7 @@ import { ScreenLayout } from '../components/ui/ScreenLayout';
 import { Typography } from '../components/ui/Typography';
 import { Card } from '../components/ui/Card';
 import { useTheme } from '../theme/theme';
+import Icon from 'react-native-vector-icons/Feather';
 
 export default function CalendarScreen() {
   console.log('Render CalendarScreen');
@@ -80,6 +81,18 @@ export default function CalendarScreen() {
       );
   };
 
+  const getEntryMediaInfo = (entry: Entry) => {
+    const images = entry.images ? JSON.parse(entry.images) : [];
+    const hasVideos = images.some((uri: string) => uri.endsWith('.mp4') || uri.endsWith('.mov'));
+    const hasImages = images.some((uri: string) => !uri.endsWith('.mp4') && !uri.endsWith('.mov'));
+    
+    return {
+      hasImages,
+      hasVideos,
+      hasVoiceNote: !!entry.voiceNote,
+    };
+  };
+
   const changeMonth = (increment: number) => {
     const newDate = new Date(selectedDate);
     newDate.setMonth(newDate.getMonth() + increment);
@@ -126,14 +139,14 @@ export default function CalendarScreen() {
   return (
     <ScreenLayout>
       <View style={[styles.header, { padding: spacing.m }]}>
-        <TouchableOpacity onPress={() => changeMonth(-1)}>
-          <Typography style={styles.navText} color={colors.primary}>←</Typography>
+        <TouchableOpacity onPress={() => changeMonth(-1)} style={{ padding: 8 }}>
+          <Icon name="chevron-left" size={24} color={colors.primary} />
         </TouchableOpacity>
         <Typography variant="subheading">
           {selectedDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
         </Typography>
-        <TouchableOpacity onPress={() => changeMonth(1)}>
-          <Typography style={styles.navText} color={colors.primary}>→</Typography>
+        <TouchableOpacity onPress={() => changeMonth(1)} style={{ padding: 8 }}>
+          <Icon name="chevron-right" size={24} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
@@ -152,24 +165,55 @@ export default function CalendarScreen() {
       />
 
       <View style={[styles.entriesList, { backgroundColor: colors.surface, borderTopLeftRadius: borderRadius.l, borderTopRightRadius: borderRadius.l }]}>
-        <Typography variant="label" color={colors.textMuted} style={styles.entriesTitle}>
-          ENTRIES FOR {selectedDate.toLocaleDateString()}
-        </Typography>
-        {selectedEntries.length > 0 ? (
-          selectedEntries.map(entry => (
+        <View style={styles.entriesHeader}>
+          <Typography variant="label" color={colors.textMuted} style={styles.entriesTitle}>
+            ENTRIES FOR {selectedDate.toLocaleDateString()}
+          </Typography>
+          {selectedEntries.length > 0 && (
             <TouchableOpacity 
-              key={entry.id} 
-              style={[styles.entryItem, { borderBottomColor: colors.surfaceHighlight }]}
-              onPress={() => navigation.navigate('EntryDetail', { entryId: entry.id })}
+              onPress={() => navigation.navigate('DailyEntries', { date: selectedDate.toISOString() })}
+              style={styles.chevronButton}
             >
-              <Typography style={styles.entryTime} color={colors.primary}>
-                {new Date(entry.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </Typography>
-              <Typography style={styles.entryPreview} numberOfLines={1}>
-                {entry.content}
-              </Typography>
+              <Icon name="chevron-right" size={20} color={colors.primary} />
             </TouchableOpacity>
-          ))
+          )}
+        </View>
+        {selectedEntries.length > 0 ? (
+          <FlatList
+            data={selectedEntries}
+            renderItem={({ item }) => {
+              const mediaInfo = getEntryMediaInfo(item);
+              return (
+                <TouchableOpacity 
+                  style={[styles.entryItem, { borderBottomColor: colors.surfaceHighlight }]}
+                  onPress={() => navigation.navigate('EntryDetail', { entryId: item.id })}
+                >
+                  <Typography style={styles.entryTime} color={colors.primary}>
+                    {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </Typography>
+                  <View style={styles.entryContent}>
+                    <Typography style={styles.entryPreview} numberOfLines={1}>
+                      {item.content}
+                    </Typography>
+                    <View style={styles.mediaIndicators}>
+                      {mediaInfo.hasVoiceNote && (
+                        <Icon name="mic" size={14} color={colors.textMuted} />
+                      )}
+                      {mediaInfo.hasVideos && (
+                        <Icon name="video" size={14} color={colors.textMuted} />
+                      )}
+                      {mediaInfo.hasImages && (
+                        <Icon name="image" size={14} color={colors.textMuted} />
+                      )}
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            }}
+            keyExtractor={(item) => item.id}
+            showsVerticalScrollIndicator={true}
+            style={styles.entriesFlatList}
+          />
         ) : (
           <Typography style={styles.emptyText} color={colors.textMuted}>No entries for this day</Typography>
         )}
@@ -200,6 +244,7 @@ const styles = StyleSheet.create({
   },
   calendarGrid: {
     padding: 10,
+    paddingBottom: 5,
   },
   dayCell: {
     width: '14.28%',
@@ -221,16 +266,30 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   entriesList: {
-    flex: 1,
+    flex: 2,
     padding: 20,
+    minHeight: 200,
   },
   entriesTitle: {
-    marginBottom: 16,
     textTransform: 'uppercase',
+  },
+  entriesHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  chevronButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'transparent',
+  },
+  entriesFlatList: {
+    flex: 1,
   },
   entryItem: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingVertical: 12,
     borderBottomWidth: 1,
     gap: 12,
@@ -238,10 +297,19 @@ const styles = StyleSheet.create({
   entryTime: {
     fontSize: 14,
     width: 60,
+    marginTop: 2,
+  },
+  entryContent: {
+    flex: 1,
   },
   entryPreview: {
     fontSize: 16,
-    flex: 1,
+    marginBottom: 4,
+  },
+  mediaIndicators: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
   },
   emptyText: {
     fontStyle: 'italic',

@@ -3,7 +3,6 @@ import { withObservables } from '@nozbe/watermelondb/react';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   StyleSheet,
   TouchableOpacity,
@@ -19,7 +18,7 @@ import { OnThisDayCard } from '../components/OnThisDayCard';
 import { database } from '../db';
 import Entry from '../db/model/Entry';
 import { sync, setupRealtimeSubscription } from '../lib/sync';
-import { supabase } from '../lib/supabaseClient';
+import { supabase, uploadFile } from '../lib/supabaseClient';
 import { calculateStreak } from '../lib/streaks';
 import { useTheme } from '../theme/theme';
 import { ScreenLayout } from '../components/ui/ScreenLayout';
@@ -30,6 +29,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { JOURNAL_QUOTES } from '../content/quotes';
 import { useSyncContext } from '../lib/SyncContext';
+import { useAlert } from '../context/AlertContext';
 
 type JournalScreenProps = {
   userId: string;
@@ -40,11 +40,14 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
   console.log('Render JournalScreen with entries:', entries.length);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors, spacing } = useTheme();
+  const { showAlert } = useAlert();
   const [draft, setDraft] = useState('');
+  const [images, setImages] = useState<string[]>([]);
+  const [voiceNote, setVoiceNote] = useState<string | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [syncInitialized, setSyncInitialized] = useState(false);
-  const { markHasUnsyncedEntries } = useSyncContext();
+  const { markHasUnsyncedEntries, isOnline } = useSyncContext();
 
   const draftKey = useMemo(() => `momento:draft:${userId}`, [userId]);
 
@@ -85,16 +88,63 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
   async function handleSave() {
     const trimmed = draft.trim();
     if (!trimmed) {
-      Alert.alert('Nothing to save', 'Write something before saving.');
+      showAlert('Nothing to save', 'Write something before saving.');
       return;
     }
     setSaving(true);
 
     try {
+      let finalImages = [...images];
+      let finalVoiceNote = voiceNote;
+
+      if (isOnline) {
+        // Upload images with better error handling
+        try {
+          const uploadedImages = await Promise.all(
+            images.map(async (img, index) => {
+              if (!img.startsWith('http')) {
+                try {
+                  const filename = `${Date.now()}_${index}.jpg`;
+                  const path = `${userId}/${filename}`;
+                  const uploadedUrl = await uploadFile(img, 'images', path);
+                  console.log('Image uploaded successfully:', uploadedUrl);
+                  return uploadedUrl;
+                } catch (uploadError) {
+                  console.error('Failed to upload image:', uploadError);
+                  // Return original URI as fallback, will be synced later
+                  return img;
+                }
+              }
+              return img;
+            })
+          );
+          finalImages = uploadedImages;
+        } catch (e) {
+          console.error('Image upload process failed:', e);
+          // Fallback to local URIs, will need manual sync later
+        }
+
+        // Upload voice note with better error handling
+        if (voiceNote && !voiceNote.startsWith('http')) {
+          try {
+            const filename = `${Date.now()}.m4a`;
+            const path = `${userId}/${filename}`;
+            const uploadedUrl = await uploadFile(voiceNote, 'voice-notes', path);
+            console.log('Voice note uploaded successfully:', uploadedUrl);
+            finalVoiceNote = uploadedUrl;
+          } catch (e) {
+            console.error('Failed to upload voice note:', e);
+            // Keep local URI as fallback
+          }
+        }
+      }
+
       const newEntry = await database.write(async () => {
-        return await database.get<Entry>('entries').create(entry => {
-          entry.content = trimmed;
-          entry.userId = userId;
+        return await database.get<Entry>('entries').create(record => {
+          record.content = trimmed;
+          record.userId = userId;
+          if (finalImages.length > 0) record.images = JSON.stringify(finalImages);
+          if (finalVoiceNote) record.voiceNote = finalVoiceNote;
         });
       });
 
@@ -108,9 +158,11 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
       });
 
       setDraft('');
+      setImages([]);
+      setVoiceNote(undefined);
       await AsyncStorage.removeItem(draftKey);
     } catch (error) {
-      Alert.alert('Save failed', (error as Error).message);
+      showAlert('Save failed', (error as Error).message);
     } finally {
       setSaving(false);
     }
@@ -204,11 +256,18 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
           </View>
         </View>
         
-        <EntryComposer value={draft} onChangeText={setDraft} />
+        <EntryComposer
+          value={draft}
+          onChangeText={setDraft}
+          images={images}
+          onImagesChange={setImages}
+          voiceNote={voiceNote}
+          onVoiceNoteChange={setVoiceNote}
+        />
 
-        <Button 
-          title={saving ? 'Saving…' : 'Save entry'} 
-          onPress={handleSave} 
+        <Button
+          title={saving ? 'Saving…' : 'Save entry'}
+          onPress={handleSave}
           loading={saving}
           disabled={saving}
           style={{ marginTop: spacing.m }}
@@ -220,20 +279,24 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
             yearsAgo={
               new Date().getFullYear() - onThisDayEntry.createdAt.getFullYear()
             }
+            onPress={() => navigation.navigate('EntryDetail', { entryId: onThisDayEntry.id })}
           />
         )}
 
         <View style={styles.quoteCard}>
-          <Typography
-            variant="body"
-            align="center"
-            style={{ marginBottom: 8 }}
-          >
-            “{quote.text}”
-          </Typography>
-          <Typography variant="caption" align="center">
-            — {quote.author}
-          </Typography>
+          <View style={{ flex: 1, justifyContent: 'center' }}>
+            <Typography
+              variant="body"
+              align="center"
+              style={{ marginBottom: 8 }}
+              numberOfLines={3}
+            >
+              “{quote.text}”
+            </Typography>
+            <Typography variant="caption" align="center">
+              — {quote.author}
+            </Typography>
+          </View>
         </View>
 
         <TouchableOpacity
@@ -249,9 +312,7 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
           <Typography variant="subheading" color={colors.primary}>
             Recent entries
           </Typography>
-          <Typography variant="subheading" color={colors.primary}>
-            →
-          </Typography>
+          <Icon name="arrow-right" size={20} color={colors.primary} />
         </TouchableOpacity>
       </View>
     </ScreenLayout>
@@ -268,11 +329,18 @@ const EnhancedEntryPreviewCard = withObservables(['entry'], ({ entry }: { entry:
   if (latestSignal?.mood) tags.push(latestSignal.mood);
   if (Array.isArray(latestSignal?.activities)) tags.push(...latestSignal.activities.slice(0, 2));
 
+  const images = entry.images ? JSON.parse(entry.images) : [];
+  const hasVideos = images.some((uri: string) => uri.endsWith('.mp4') || uri.endsWith('.mov'));
+  const hasImages = images.some((uri: string) => !uri.endsWith('.mp4') && !uri.endsWith('.mov'));
+
   const item: EntryPreview = {
     id: entry.id,
     content: entry.content,
     createdAt: formatTimestamp(entry.createdAt),
     tags: tags.length ? tags.slice(0, 2) : undefined,
+    hasImages,
+    hasVideos,
+    hasVoiceNote: !!entry.voiceNote,
   };
 
   return <EntryPreviewCard item={item} />;
@@ -342,8 +410,10 @@ const styles = StyleSheet.create({
   quoteCard: {
     marginTop: 32,
     paddingHorizontal: 24,
-    paddingVertical: 32,
+    paddingVertical: 24,
     borderRadius: 24,
+    height: 160,
+    justifyContent: 'center',
   },
   recentEntriesButton: {
     marginTop: 32,

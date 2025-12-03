@@ -47,6 +47,8 @@ function RecentEntriesScreenBase({ entries }: RecentEntriesProps) {
               id: item.id,
               content: item.content,
               createdAt: item.createdAt.toLocaleString(),
+              hasImages: !!item.images && JSON.parse(item.images).length > 0,
+              hasVoiceNote: !!item.voiceNote,
             };
 
             return (

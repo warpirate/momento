@@ -11,6 +11,9 @@ import { Typography } from '../components/ui/Typography';
 import { Card } from '../components/ui/Card';
 import { useTheme } from '../theme/theme';
 import Icon from 'react-native-vector-icons/Feather';
+import { EntryPreview, EntryPreviewCard } from '../components/EntryPreviewCard';
+import { supabase } from '../lib/supabaseClient';
+import { useSyncContext } from '../lib/SyncContext';
 
 export default function SearchScreen() {
   console.log('Render SearchScreen');
@@ -19,6 +22,7 @@ export default function SearchScreen() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Entry[]>([]);
   const [searching, setSearching] = useState(false);
+  const { isOnline } = useSyncContext();
 
   useEffect(() => {
     const searchEntries = async () => {
@@ -29,14 +33,39 @@ export default function SearchScreen() {
 
       setSearching(true);
       try {
-        const entries = await database.get<Entry>('entries')
-          .query(
-            Q.where('content', Q.like(`%${query}%`)),
-            Q.sortBy('created_at', Q.desc)
-          )
-          .fetch();
+        let resultsFromDB: Entry[] = [];
+
+        if (isOnline) {
+          try {
+            const { data, error } = await supabase.functions.invoke('search-entries', {
+              body: { query }
+            });
+
+            if (!error && data?.entries && data.entries.length > 0) {
+              const ids = data.entries.map((e: any) => e.id);
+              const fetched = await database.get<Entry>('entries').query(
+                Q.where('id', Q.oneOf(ids))
+              ).fetch();
+              
+              // Sort by similarity (order of IDs returned from server)
+              resultsFromDB = fetched.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+            }
+          } catch (err) {
+            console.warn('Semantic search failed, falling back to local:', err);
+          }
+        }
+
+        // Fallback/Mix: If no semantic results (or offline), use keyword search
+        if (resultsFromDB.length === 0) {
+           resultsFromDB = await database.get<Entry>('entries')
+            .query(
+              Q.where('content', Q.like(`%${query}%`)),
+              Q.sortBy('created_at', Q.desc)
+            )
+            .fetch();
+        }
         
-        setResults(entries);
+        setResults(resultsFromDB);
       } catch (error) {
         console.error('Search failed:', error);
       } finally {
@@ -44,29 +73,27 @@ export default function SearchScreen() {
       }
     };
 
-    const timeoutId = setTimeout(searchEntries, 300); // Debounce
+    const timeoutId = setTimeout(searchEntries, 500); // Increased debounce for API calls
     return () => clearTimeout(timeoutId);
-  }, [query]);
+  }, [query, isOnline]);
 
-  const renderItem = ({ item }: { item: Entry }) => (
-    <TouchableOpacity 
-      onPress={() => navigation.navigate('EntryDetail', { entryId: item.id })}
-    >
-      <Card style={styles.resultItem}>
-        <View style={styles.resultHeader}>
-          <Typography variant="label" color={colors.primaryLight}>
-            {new Date(item.createdAt).toLocaleDateString()}
-          </Typography>
-          <Typography variant="caption">
-            {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Typography>
-        </View>
-        <Typography variant="body" numberOfLines={3} style={styles.resultContent}>
-          {item.content}
-        </Typography>
-      </Card>
-    </TouchableOpacity>
-  );
+  const renderItem = ({ item }: { item: Entry }) => {
+    const preview: EntryPreview = {
+      id: item.id,
+      content: item.content,
+      createdAt: item.createdAt.toLocaleString(),
+      hasImages: !!item.images && JSON.parse(item.images).length > 0,
+      hasVoiceNote: !!item.voiceNote,
+    };
+
+    return (
+      <TouchableOpacity
+        onPress={() => navigation.navigate('EntryDetail', { entryId: item.id })}
+      >
+        <EntryPreviewCard item={preview} />
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <ScreenLayout>

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
@@ -11,6 +11,9 @@ import { ScreenLayout } from '../components/ui/ScreenLayout';
 import { Typography } from '../components/ui/Typography';
 import { Card } from '../components/ui/Card';
 import { useTheme } from '../theme/theme';
+import AudioRecorderPlayer from 'react-native-audio-recorder-player';
+import Icon from 'react-native-vector-icons/Feather';
+import { useAlert } from '../context/AlertContext';
 
 type EntryDetailRouteProp = RouteProp<RootStackParamList, 'EntryDetail'>;
 
@@ -18,7 +21,43 @@ function EntryDetailScreen({ entry, signals }: { entry: Entry; signals: any[] })
   console.log('Render EntryDetailScreen');
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors, spacing, borderRadius } = useTheme();
+  const { showAlert } = useAlert();
   const [deleting, setDeleting] = useState(false);
+  
+  const audioRecorderPlayer = useRef(new AudioRecorderPlayer()).current;
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playTime, setPlayTime] = useState('00:00');
+  const [duration, setDuration] = useState('00:00');
+
+  useEffect(() => {
+    return () => {
+      audioRecorderPlayer.stopPlayer();
+      audioRecorderPlayer.removePlayBackListener();
+    };
+  }, []);
+
+  const onStartPlay = async () => {
+    if (!entry.voiceNote) return;
+    console.log('onStartPlay');
+    const msg = await audioRecorderPlayer.startPlayer(entry.voiceNote);
+    console.log(msg);
+    audioRecorderPlayer.addPlayBackListener((e) => {
+      setPlayTime(audioRecorderPlayer.mmssss(Math.floor(e.currentPosition)));
+      setDuration(audioRecorderPlayer.mmssss(Math.floor(e.duration)));
+      if (e.currentPosition === e.duration) {
+        console.log('finished');
+        audioRecorderPlayer.stopPlayer();
+        setIsPlaying(false);
+      }
+      return;
+    });
+    setIsPlaying(true);
+  };
+
+  const onPausePlay = async () => {
+    await audioRecorderPlayer.pausePlayer();
+    setIsPlaying(false);
+  };
 
   if (!entry) {
     return (
@@ -29,7 +68,7 @@ function EntryDetailScreen({ entry, signals }: { entry: Entry; signals: any[] })
   }
 
   const handleDelete = () => {
-    Alert.alert(
+    showAlert(
       'Delete Entry',
       'Are you sure you want to delete this entry? This cannot be undone.',
       [
@@ -46,7 +85,7 @@ function EntryDetailScreen({ entry, signals }: { entry: Entry; signals: any[] })
               await sync();
               navigation.goBack();
             } catch (error) {
-              Alert.alert('Error', 'Failed to delete entry');
+              showAlert('Error', 'Failed to delete entry');
               setDeleting(false);
             }
           },
@@ -61,11 +100,16 @@ function EntryDetailScreen({ entry, signals }: { entry: Entry; signals: any[] })
     <ScreenLayout>
       <View style={[styles.header, { padding: spacing.m, borderBottomColor: colors.surfaceHighlight }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Typography color={colors.primary}>← Back</Typography>
+          <Icon name="arrow-left" size={24} color={colors.primary} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={handleDelete} disabled={deleting}>
-          <Typography color={colors.error}>Delete</Typography>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 16 }}>
+          <TouchableOpacity onPress={() => navigation.navigate('EditEntry', { entryId: entry.id })}>
+            <Typography color={colors.primary}>Edit</Typography>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleDelete} disabled={deleting}>
+            <Typography color={colors.error}>Delete</Typography>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={[styles.contentContainer, { padding: spacing.m }]}>
@@ -76,22 +120,64 @@ function EntryDetailScreen({ entry, signals }: { entry: Entry; signals: any[] })
           {new Date(entry.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </Typography>
         
-        {latestSignal && (
-          <View style={styles.signalsContainer}>
-            {latestSignal.mood && (
-              <View style={[styles.signalBadge, { backgroundColor: colors.primaryLight + '20', borderColor: colors.primaryLight + '50' }]}>
-                <Typography variant="label" color={colors.primary}>Mood: {latestSignal.mood}</Typography>
-              </View>
-            )}
-            {latestSignal.sentimentScore !== undefined && (
-              <View style={[styles.signalBadge, { backgroundColor: colors.primaryLight + '20', borderColor: colors.primaryLight + '50' }]}>
-                <Typography variant="label" color={colors.primary}>Sentiment: {latestSignal.sentimentScore.toFixed(1)}</Typography>
-              </View>
-            )}
-          </View>
-        )}
+        <View style={styles.signalsContainer}>
+          {/* User Ratings */}
+          {entry.moodRating && (
+            <View style={[styles.signalBadge, { backgroundColor: colors.primaryLight + '20', borderColor: colors.primaryLight + '50' }]}>
+              <Typography variant="label" color={colors.primary}>Mood: {entry.moodRating}</Typography>
+            </View>
+          )}
+          {entry.energyRating !== undefined && (
+            <View style={[styles.signalBadge, { backgroundColor: colors.primaryLight + '20', borderColor: colors.primaryLight + '50' }]}>
+              <Typography variant="label" color={colors.primary}>Energy: {entry.energyRating}/10</Typography>
+            </View>
+          )}
+          {entry.sleepRating !== undefined && (
+            <View style={[styles.signalBadge, { backgroundColor: colors.primaryLight + '20', borderColor: colors.primaryLight + '50' }]}>
+              <Typography variant="label" color={colors.primary}>Sleep: {entry.sleepRating}/10</Typography>
+            </View>
+          )}
+
+          {/* AI Signals */}
+          {latestSignal && (
+            <>
+              {latestSignal.mood && !entry.moodRating && (
+                <View style={[styles.signalBadge, { backgroundColor: colors.primaryLight + '20', borderColor: colors.primaryLight + '50' }]}>
+                  <Typography variant="label" color={colors.primary}>AI Mood: {latestSignal.mood}</Typography>
+                </View>
+              )}
+              {latestSignal.sentimentScore !== undefined && (
+                <View style={[styles.signalBadge, { backgroundColor: colors.primaryLight + '20', borderColor: colors.primaryLight + '50' }]}>
+                  <Typography variant="label" color={colors.primary}>Sentiment: {latestSignal.sentimentScore.toFixed(1)}</Typography>
+                </View>
+              )}
+            </>
+          )}
+        </View>
 
         <Typography variant="body" style={styles.content}>{entry.content}</Typography>
+
+        {entry.images && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagesContainer}>
+            {JSON.parse(entry.images).map((uri: string, index: number) => (
+              <Image key={index} source={{ uri }} style={styles.image} />
+            ))}
+          </ScrollView>
+        )}
+
+        {entry.voiceNote && (
+          <View style={[styles.voiceNoteContainer, { backgroundColor: colors.surfaceHighlight, borderRadius: borderRadius.m }]}>
+            <TouchableOpacity onPress={isPlaying ? onPausePlay : onStartPlay}>
+              <Icon name={isPlaying ? "pause" : "play"} size={24} color={colors.primary} />
+            </TouchableOpacity>
+            <View style={{ marginLeft: 12 }}>
+              <Typography variant="body" style={{ fontWeight: 'bold' }}>Voice Note</Typography>
+              <Typography variant="caption" color={colors.textMuted}>
+                {isPlaying ? `${playTime} / ${duration}` : 'Tap to play'}
+              </Typography>
+            </View>
+          </View>
+        )}
 
         {latestSignal && (
           <Card style={styles.analysisSection}>
@@ -150,6 +236,21 @@ const styles = StyleSheet.create({
   content: {
     fontSize: 18,
     lineHeight: 28,
+    marginBottom: 30,
+  },
+  imagesContainer: {
+    marginBottom: 30,
+  },
+  image: {
+    width: 200,
+    height: 200,
+    borderRadius: 12,
+    marginRight: 12,
+  },
+  voiceNoteContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
     marginBottom: 30,
   },
   signalsContainer: {

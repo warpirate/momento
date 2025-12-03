@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView, Share, Linking } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -9,31 +9,122 @@ import { Typography } from '../components/ui/Typography';
 import { Logo } from '../components/ui/Logo';
 import { ThemeToggle } from '../components/ui/ThemeToggle';
 import { useTheme } from '../theme/theme';
+import { database } from '../db';
+import Entry from '../db/model/Entry';
+import Icon from 'react-native-vector-icons/Feather';
+import { useAlert } from '../context/AlertContext';
+import { useSyncContext } from '../lib/SyncContext';
+
+const APP_VERSION = '0.0.1';
+const GITHUB_REPO = 'warpirate/momento';
+
+const compareVersions = (v1: string, v2: string) => {
+  const parts1 = v1.split('.').map(Number);
+  const parts2 = v2.split('.').map(Number);
+  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+    const p1 = parts1[i] || 0;
+    const p2 = parts2[i] || 0;
+    if (p1 > p2) return 1;
+    if (p1 < p2) return -1;
+  }
+  return 0;
+};
 
 export default function SettingsScreen() {
   console.log('Render SettingsScreen');
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors, spacing, borderRadius, themeMode, setThemeMode } = useTheme();
+  const { showAlert } = useAlert();
+  const { sync, isSyncing, lastSyncAt } = useSyncContext();
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
-      Alert.alert('Error signing out', error.message);
+      showAlert('Error signing out', error.message);
     }
   };
 
-  const SettingItem = ({ label, onPress, destructive = false }: { label: string; onPress: () => void; destructive?: boolean }) => (
-    <TouchableOpacity 
-      style={[styles.item, { borderBottomColor: colors.surfaceHighlight }]} 
+  const handleExportData = async () => {
+    try {
+      const entries = await database.get<Entry>('entries').query().fetch();
+      const data = entries.map(entry => ({
+        id: entry.id,
+        content: entry.content,
+        createdAt: entry.createdAt,
+        updatedAt: entry.updatedAt,
+        moodRating: entry.moodRating,
+        sleepRating: entry.sleepRating,
+        energyRating: entry.energyRating,
+        images: entry.images,
+        voiceNote: entry.voiceNote,
+      }));
+
+      const json = JSON.stringify(data, null, 2);
+      
+      await Share.share({
+        message: json,
+        title: 'Momento Journal Export',
+      });
+    } catch (error) {
+      showAlert('Export failed', (error as Error).message);
+    }
+  };
+
+  const checkForUpdates = async () => {
+    try {
+      const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch release info');
+      }
+      const data = await response.json();
+      const latestVersion = data.tag_name.replace(/^v/, '');
+      
+      if (compareVersions(latestVersion, APP_VERSION) > 0) {
+        showAlert(
+          'Update Available',
+          `A new version (${latestVersion}) is available.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Download', onPress: () => Linking.openURL(data.html_url) }
+          ]
+        );
+      } else {
+        showAlert('Up to date', 'You are using the latest version of Momento.');
+      }
+    } catch (error) {
+      showAlert('Error', 'Failed to check for updates.');
+    }
+  };
+
+  const SettingItem = ({
+    label,
+    onPress,
+    destructive = false,
+    value
+  }: {
+    label: string;
+    onPress: () => void;
+    destructive?: boolean;
+    value?: string;
+  }) => (
+    <TouchableOpacity
+      style={[styles.item, { borderBottomColor: colors.surfaceHighlight }]}
       onPress={onPress}
     >
-      <Typography 
-        style={styles.itemLabel} 
-        color={destructive ? colors.error : colors.textPrimary}
-      >
-        {label}
-      </Typography>
-      <Typography style={styles.chevron} color={colors.textMuted}>›</Typography>
+      <View>
+        <Typography
+          style={styles.itemLabel}
+          color={destructive ? colors.error : colors.textPrimary}
+        >
+          {label}
+        </Typography>
+        {value && (
+          <Typography variant="caption" color={colors.textMuted} style={{ marginTop: 4 }}>
+            {value}
+          </Typography>
+        )}
+      </View>
+      <Icon name="chevron-right" size={20} color={colors.textMuted} />
     </TouchableOpacity>
   );
 
@@ -41,7 +132,7 @@ export default function SettingsScreen() {
     <ScreenLayout>
       <View style={[styles.header, { padding: spacing.m }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Typography color={colors.primary}>← Back</Typography>
+          <Icon name="arrow-left" size={24} color={colors.primary} />
         </TouchableOpacity>
         <Logo size="small" />
         <Typography variant="heading">Settings</Typography>
@@ -51,14 +142,18 @@ export default function SettingsScreen() {
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.surfaceHighlight, borderRadius: borderRadius.l }]}>
           <Typography variant="label" color={colors.textMuted} style={styles.sectionTitle}>ACCOUNT</Typography>
           <SettingItem label="Profile" onPress={() => navigation.navigate('Profile')} />
-          <SettingItem label="Notifications" onPress={() => Alert.alert('Coming soon')} />
-          <SettingItem label="Privacy" onPress={() => Alert.alert('Coming soon')} />
+          <SettingItem label="Notifications" onPress={() => showAlert('Coming soon', 'This feature is under development.')} />
+          <SettingItem label="Privacy" onPress={() => showAlert('Coming soon', 'This feature is under development.')} />
         </View>
 
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.surfaceHighlight, borderRadius: borderRadius.l }]}>
           <Typography variant="label" color={colors.textMuted} style={styles.sectionTitle}>DATA</Typography>
-          <SettingItem label="Export Data" onPress={() => Alert.alert('Coming soon')} />
-          <SettingItem label="Sync Now" onPress={() => Alert.alert('Syncing...')} />
+          <SettingItem label="Export Data" onPress={handleExportData} />
+          <SettingItem
+            label={isSyncing ? "Syncing..." : "Sync Now"}
+            onPress={sync}
+            value={lastSyncAt ? `Last synced: ${lastSyncAt.toLocaleString()}` : 'Never synced'}
+          />
         </View>
 
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.surfaceHighlight, borderRadius: borderRadius.l }]}>
@@ -74,7 +169,17 @@ export default function SettingsScreen() {
               <ThemeToggle value={themeMode} onValueChange={setThemeMode} />
             </View>
           </View>
-          <SettingItem label="About Momento" onPress={() => Alert.alert('Momento v0.0.1')} />
+          <SettingItem
+            label="About Momento"
+            onPress={() => showAlert(
+              'Momento',
+              `Version ${APP_VERSION}`,
+              [
+                { text: 'OK' },
+                { text: 'Check for Updates', onPress: checkForUpdates }
+              ]
+            )}
+          />
         </View>
 
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.surfaceHighlight, borderRadius: borderRadius.l }]}>

@@ -2,12 +2,16 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTheme } from '../theme/theme';
 import { Typography } from './ui/Typography';
+import Icon from 'react-native-vector-icons/Feather';
 
 export type EntryPreview = {
   id: string;
   content: string;
   createdAt: string;
   tags?: string[];
+  hasImages?: boolean;
+  hasVideos?: boolean;
+  hasVoiceNote?: boolean;
 };
 
 type EntryPreviewCardProps = {
@@ -24,17 +28,28 @@ export function EntryPreviewCard({ item }: EntryPreviewCardProps) {
         <Typography variant="caption" color={colors.primary}>
           {item.createdAt}
         </Typography>
-        {item.tags && item.tags.length > 0 && (
-          <View style={styles.tagsContainer}>
-            {item.tags.slice(0, 2).map((tag, index) => (
-              <View key={index} style={[styles.tag, { backgroundColor: colors.primaryLight + '20' }]}>
-                <Typography variant="caption" color={colors.primary} style={styles.tagText}>
-                  {tag}
-                </Typography>
-              </View>
-            ))}
-          </View>
-        )}
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          {item.hasVoiceNote && (
+            <Icon name="mic" size={14} color={colors.textMuted} />
+          )}
+          {item.hasVideos && (
+            <Icon name="video" size={14} color={colors.textMuted} />
+          )}
+          {item.hasImages && (
+            <Icon name="image" size={14} color={colors.textMuted} />
+          )}
+          {item.tags && item.tags.length > 0 && (
+            <View style={styles.tagsContainer}>
+              {item.tags.slice(0, 2).map((tag, index) => (
+                <View key={index} style={[styles.tag, { backgroundColor: colors.primaryLight + '20' }]}>
+                  <Typography variant="caption" color={colors.primary} style={styles.tagText}>
+                    {tag}
+                  </Typography>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
       </View>
       <Typography variant="body" numberOfLines={4} style={styles.excerpt}>
         {previewText}

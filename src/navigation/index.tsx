@@ -18,6 +18,9 @@ import EntryDetailScreen from '../screens/EntryDetailScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import RecentEntriesScreen from '../screens/RecentEntriesScreen';
+import EditEntryScreen from '../screens/EditEntryScreen';
+import CameraScreen from '../screens/CameraScreen';
+import DailyEntriesScreen from '../screens/DailyEntriesScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -247,9 +250,12 @@ export function Navigation({ session }: { session: any }) {
           <>
             <Stack.Screen name="Main" component={MainTabs} />
             <Stack.Screen name="EntryDetail" component={EntryDetailScreen} />
+            <Stack.Screen name="EditEntry" component={EditEntryScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
             <Stack.Screen name="Profile" component={ProfileScreen} />
             <Stack.Screen name="RecentEntries" component={RecentEntriesScreen} />
+            <Stack.Screen name="DailyEntries" component={DailyEntriesScreen} />
+            <Stack.Screen name="Camera" component={CameraScreen} options={{ presentation: 'fullScreenModal' }} />
           </>
         )}
       </Stack.Navigator>

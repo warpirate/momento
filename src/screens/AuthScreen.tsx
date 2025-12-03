@@ -1,6 +1,5 @@
 import React, {useState} from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -12,6 +11,7 @@ import {
 
 import {supabase} from '../lib/supabaseClient';
 import {Logo} from '../components/ui/Logo';
+import { useAlert } from '../context/AlertContext';
 
 // Use a single default export for the screen component to avoid any ambiguity
 // when importing it into the navigation tree.
@@ -21,10 +21,11 @@ export default function AuthScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<'signin' | 'signup'>('signup');
+  const { showAlert } = useAlert();
 
   async function handleSubmit() {
     if (!email || !password) {
-      Alert.alert('Missing info', 'Enter both email and password.');
+      showAlert('Missing info', 'Enter both email and password.');
       return;
     }
     setLoading(true);
@@ -36,7 +37,7 @@ export default function AuthScreen() {
           options: {emailRedirectTo: 'momento://auth-callback'},
         });
         if (error) throw error;
-        Alert.alert(
+        showAlert(
           'Verify email',
           'Check your inbox to confirm the sign-up. Use the same credentials to log in afterward.',
         );
@@ -45,7 +46,7 @@ export default function AuthScreen() {
         if (error) throw error;
       }
     } catch (error) {
-      Alert.alert('Auth error', (error as Error).message);
+      showAlert('Auth error', (error as Error).message);
     } finally {
       setLoading(false);
     }
