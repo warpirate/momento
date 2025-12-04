@@ -16,7 +16,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useAlert } from '../context/AlertContext';
 import { useSyncContext } from '../lib/SyncContext';
 
-const APP_VERSION = '0.0.3';
+const APP_VERSION = '0.0.4';
 const GITHUB_REPO = 'warpirate/momento';
 
 const compareVersions = (v1: string, v2: string) => {
