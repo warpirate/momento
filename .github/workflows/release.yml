@@ -47,8 +47,9 @@ jobs:
           java-version: '17'
 
       - name: Build Android Release
-        cd android
-        run: ./gradlew assembleRelease
+        run: |
+          cd android
+          ./gradlew assembleRelease
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
