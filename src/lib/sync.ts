@@ -1,4 +1,5 @@
 import { synchronize } from '@nozbe/watermelondb/sync';
+import { Q } from '@nozbe/watermelondb';
 import { database } from '../db';
 import { supabase } from './supabaseClient';
 import { generateUUID, isValidUUID } from './uuid';
@@ -43,6 +44,36 @@ export async function sync() {
 
         const { changes, timestamp } = data;
         console.log('Pulled changes:', changes);
+
+        // Fix for "Server wants client to create record... but it already exists locally"
+        // Check if any "created" entries already exist locally and move them to "updated"
+        if (changes.entries?.created?.length > 0) {
+          const createdIds = changes.entries.created.map((e: any) => e.id);
+          try {
+            const existingRecords = await database.get('entries').query(Q.where('id', Q.oneOf(createdIds))).fetch();
+            const existingIds = new Set(existingRecords.map(r => r.id));
+
+            if (existingIds.size > 0) {
+              console.log('Found existing records in created list, moving to updated:', Array.from(existingIds));
+              const newCreated: any[] = [];
+              const newUpdated = changes.entries.updated || [];
+
+              for (const entry of changes.entries.created) {
+                if (existingIds.has(entry.id)) {
+                  newUpdated.push(entry);
+                } else {
+                  newCreated.push(entry);
+                }
+              }
+
+              changes.entries.created = newCreated;
+              changes.entries.updated = newUpdated;
+            }
+          } catch (err) {
+            console.warn('Error checking for existing records:', err);
+          }
+        }
+
         console.log('Timestamp from server:', timestamp);
         return { changes, timestamp: Math.floor(timestamp) };
       },
@@ -110,6 +141,10 @@ export async function sync() {
       // migration-based sync. This avoids WatermelonDB's
       // "[Sync] Migration syncs cannot be enabled on a database that does not support migrations"
       // diagnostic error.
+      conflictResolver: (table, local, remote, resolved) => {
+        console.log(`Conflict detected in ${table}:`, { local, remote, resolved });
+        return resolved;
+      },
     });
     console.log('Sync completed successfully');
   } catch (error) {

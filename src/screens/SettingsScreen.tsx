@@ -1,5 +1,6 @@
-import React from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView, Share, Linking } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, TouchableOpacity, ScrollView, Share, Linking, Platform, NativeModules } from 'react-native';
+import RNFS from 'react-native-fs';
 import { supabase } from '../lib/supabaseClient';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -70,6 +71,57 @@ export default function SettingsScreen() {
     }
   };
 
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+
+  const downloadAndInstallApk = async (url: string, version: string) => {
+    if (Platform.OS !== 'android') {
+      showAlert('Unsupported', 'In-app updates are only available on Android.');
+      Linking.openURL(url);
+      return;
+    }
+
+    try {
+      setIsDownloading(true);
+      setDownloadProgress(0);
+
+      const fileName = `momento-${version}.apk`;
+      const destPath = `${RNFS.CachesDirectoryPath}/${fileName}`;
+
+      // Delete old APK if exists
+      const exists = await RNFS.exists(destPath);
+      if (exists) {
+        await RNFS.unlink(destPath);
+      }
+
+      const download = RNFS.downloadFile({
+        fromUrl: url,
+        toFile: destPath,
+        progress: (res: { bytesWritten: number; contentLength: number }) => {
+          const progress = Math.round((res.bytesWritten / res.contentLength) * 100);
+          setDownloadProgress(progress);
+        },
+        progressDivider: 5,
+      });
+
+      const result = await download.promise;
+
+      if (result.statusCode !== 200) {
+        throw new Error('Download failed');
+      }
+
+      setIsDownloading(false);
+
+      // Trigger install via native module
+      const { ApkInstaller } = NativeModules;
+      await ApkInstaller.install(destPath);
+    } catch (error) {
+      setIsDownloading(false);
+      console.error('Update failed:', error);
+      showAlert('Update Failed', 'Could not download or install the update. Please try again.');
+    }
+  };
+
   const checkForUpdates = async () => {
     try {
       const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
@@ -78,19 +130,36 @@ export default function SettingsScreen() {
       }
       const data = await response.json();
       const latestVersion = data.tag_name.replace(/^v/, '');
-      
-      if (compareVersions(latestVersion, APP_VERSION) > 0) {
-        showAlert(
-          'Update Available',
-          `A new version (${latestVersion}) is available.`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Download', onPress: () => Linking.openURL(data.html_url) }
-          ]
-        );
-      } else {
-        showAlert('Up to date', 'You are using the latest version of Momento.');
+
+      const updateAvailable = compareVersions(latestVersion, APP_VERSION) > 0;
+      const apkAsset = data.assets?.find((asset: { browser_download_url: string }) =>
+        asset.browser_download_url.toLowerCase().endsWith('.apk')
+      );
+
+      if (updateAvailable) {
+        if (Platform.OS === 'android' && apkAsset?.browser_download_url) {
+          showAlert(
+            'Update Available',
+            `A new version (${latestVersion}) is available. Download and install now?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Update', onPress: () => downloadAndInstallApk(apkAsset.browser_download_url, latestVersion) }
+            ]
+          );
+        } else {
+          showAlert(
+            'Update Available',
+            `A new version (${latestVersion}) is available.`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Download', onPress: () => Linking.openURL(data.html_url) }
+            ]
+          );
+        }
+        return;
       }
+
+      showAlert('Up to date', 'You are using the latest version of Momento.');
     } catch (error) {
       showAlert('Error', 'Failed to check for updates.');
     }

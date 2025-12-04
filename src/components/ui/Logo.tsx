@@ -10,7 +10,7 @@ interface LogoProps {
 }
 
 export const Logo: React.FC<LogoProps> = ({
-  size = 'medium',
+  size = 'large', // Changed from 'medium' to 'large' for better visibility
   variant = 'appLogo',
   style,
   containerStyle,

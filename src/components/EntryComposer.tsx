@@ -84,7 +84,15 @@ export function EntryComposer({
 
     const result = await audioRecorderPlayer.startRecorder();
     audioRecorderPlayer.addRecordBackListener((e) => {
-      setRecordTime(audioRecorderPlayer.mmss(Math.floor(e.currentPosition)));
+      // Format time as mm:ss, removing milliseconds
+      const rawTime = audioRecorderPlayer.mmss(Math.floor(e.currentPosition / 1000));
+      // mmss returns mm:ss:ms, so we split and take the first two parts
+      const parts = rawTime.split(':');
+      if (parts.length >= 2) {
+        setRecordTime(`${parts[0]}:${parts[1]}`);
+      } else {
+        setRecordTime(rawTime);
+      }
       return;
     });
     setIsRecording(true);
@@ -106,8 +114,23 @@ export function EntryComposer({
     const msg = await audioRecorderPlayer.startPlayer(voiceNote);
     console.log(msg);
     audioRecorderPlayer.addPlayBackListener((e) => {
-      setPlayTime(audioRecorderPlayer.mmss(Math.floor(e.currentPosition)));
-      setDuration(audioRecorderPlayer.mmss(Math.floor(e.duration)));
+      // Format time as mm:ss
+      const rawPlayTime = audioRecorderPlayer.mmss(Math.floor(e.currentPosition / 1000));
+      const playParts = rawPlayTime.split(':');
+      if (playParts.length >= 2) {
+        setPlayTime(`${playParts[0]}:${playParts[1]}`);
+      } else {
+        setPlayTime(rawPlayTime);
+      }
+
+      const rawDuration = audioRecorderPlayer.mmss(Math.floor(e.duration / 1000));
+      const durationParts = rawDuration.split(':');
+      if (durationParts.length >= 2) {
+        setDuration(`${durationParts[0]}:${durationParts[1]}`);
+      } else {
+        setDuration(rawDuration);
+      }
+
       setCurrentPositionSec(e.currentPosition);
       setCurrentDurationSec(e.duration);
       if (e.currentPosition >= e.duration && e.duration > 0) {
@@ -322,9 +345,9 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   previewImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
+    width: 120,
+    height: 120,
+    borderRadius: 12,
     backgroundColor: '#000',
   },
   videoOverlay: {
@@ -332,7 +355,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: 8,
+    borderRadius: 12,
   },
   removeImageButton: {
     position: 'absolute',
