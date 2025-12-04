@@ -1,4 +1,30 @@
 {
   "name": "Momento",
-  "displayName": "Momento"
+  "displayName": "Momento",
+  "expo": {
+    "name": "Momento",
+    "slug": "momento",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/logos/1024x1024.png",
+    "splash": {
+      "image": "./assets/logos/1024x1024.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.momento"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logos/1024x1024.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.yourcompany.momento"
+    }
+  }
 }

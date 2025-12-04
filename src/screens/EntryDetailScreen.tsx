@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, Dimensions } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
@@ -42,8 +42,23 @@ function EntryDetailScreen({ entry, signals }: { entry: Entry; signals: any[] })
     const msg = await audioRecorderPlayer.startPlayer(entry.voiceNote);
     console.log(msg);
     audioRecorderPlayer.addPlayBackListener((e) => {
-      setPlayTime(audioRecorderPlayer.mmssss(Math.floor(e.currentPosition)));
-      setDuration(audioRecorderPlayer.mmssss(Math.floor(e.duration)));
+      // Format time as mm:ss
+      const rawPlayTime = audioRecorderPlayer.mmss(Math.floor(e.currentPosition / 1000));
+      const playParts = rawPlayTime.split(':');
+      if (playParts.length >= 2) {
+        setPlayTime(`${playParts[0]}:${playParts[1]}`);
+      } else {
+        setPlayTime(rawPlayTime);
+      }
+
+      const rawDuration = audioRecorderPlayer.mmss(Math.floor(e.duration / 1000));
+      const durationParts = rawDuration.split(':');
+      if (durationParts.length >= 2) {
+        setDuration(`${durationParts[0]}:${durationParts[1]}`);
+      } else {
+        setDuration(rawDuration);
+      }
+
       if (e.currentPosition === e.duration) {
         console.log('finished');
         audioRecorderPlayer.stopPlayer();
@@ -242,10 +257,11 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   image: {
-    width: 200,
-    height: 200,
+    width: Dimensions.get('window').width - 48, // Full width with padding
+    height: Dimensions.get('window').width - 48, // Square aspect ratio
     borderRadius: 12,
     marginRight: 12,
+    resizeMode: 'cover',
   },
   voiceNoteContainer: {
     flexDirection: 'row',
