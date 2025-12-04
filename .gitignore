@@ -34,8 +34,6 @@ android/app/build/
 android/build/
 android/.gradle
 android/captures/
-android/gradlew
-android/gradlew.bat
 android/local.properties
 android/*.iml
 android/*.keystore
