@@ -14,7 +14,9 @@ import { Card } from '../components/ui/Card';
 import { useTheme } from '../theme/theme';
 import Icon from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { BADGES, getUnlockedBadges } from '../lib/gamification';
+import { BADGES, getUnlockedBadges, Badge, getBadgesByCategory, BadgeCategory } from '../lib/gamification';
+import { EditProfileModal } from '../components/EditProfileModal';
+import { BadgeDetailsModal } from '../components/BadgeDetailsModal';
 
 type ProfileStats = {
   totalEntries: number;
@@ -37,11 +39,16 @@ export default function ProfileScreen() {
 
   const [session, setSession] = useState<Session | null>(null);
   const [stealthMode, setStealthMode] = useState(true);
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [selectedBadge, setSelectedBadge] = useState<Badge | null>(null);
+
+  const fetchSession = async () => {
+    const { data } = await supabase.auth.getSession();
+    setSession(data.session ?? null);
+  };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session ?? null);
-    });
+    fetchSession();
   }, []);
 
   useEffect(() => {
@@ -76,6 +83,7 @@ export default function ProfileScreen() {
 
   const email = session?.user?.email ?? 'Unknown email';
   const userName = session?.user?.user_metadata?.name || session?.user?.user_metadata?.full_name || email.split('@')[0] || 'User';
+  const dob = session?.user?.user_metadata?.date_of_birth || '';
 
   const accountCreatedAt = useMemo(() => {
     const created = session?.user?.created_at;
@@ -150,23 +158,41 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.profileTextBlock}>
-            <Typography variant="subheading">{userName}</Typography>
+            <View style={styles.nameRow}>
+              <Typography variant="subheading" style={styles.nameText}>{userName}</Typography>
+              <TouchableOpacity
+                onPress={() => setShowEditProfile(true)}
+                style={styles.editButton}
+              >
+                <Icon name="edit-2" size={16} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
+            
             <View style={styles.emailRow}>
               <Typography variant="caption" style={styles.emailText}>
                 {stealthMode ? obfuscateEmail(email) : email}
               </Typography>
-              <TouchableOpacity 
-                onPress={() => setStealthMode(!stealthMode)} 
+              <TouchableOpacity
+                onPress={() => setStealthMode(!stealthMode)}
                 style={styles.stealthButton}
               >
-                <Icon 
-                  name={stealthMode ? "eye-off" : "eye"} 
-                  size={16} 
-                  color={colors.textMuted} 
+                <Icon
+                  name={stealthMode ? "eye-off" : "eye"}
+                  size={16}
+                  color={colors.textMuted}
                 />
               </TouchableOpacity>
             </View>
-            <Typography variant="caption">
+
+            <Typography variant="caption" style={styles.metaText}>
+              {dob ? `Born ${new Date(dob).toLocaleDateString(undefined, {
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric'
+              })}` : 'Add your birthday'}
+            </Typography>
+
+            <Typography variant="caption" style={styles.metaText}>
               {accountCreatedAt
                 ? `Member since ${accountCreatedAt.toLocaleDateString(undefined, {
                     month: 'long',
@@ -200,15 +226,39 @@ export default function ProfileScreen() {
           <Typography variant="subheading">Badges</Typography>
         </View>
 
-        <View style={styles.badgesGrid}>
-          {BADGES.map(badge => {
-            const isUnlocked = unlockedBadges.some(b => b.id === badge.id);
+        <View style={styles.badgesContainer}>
+          {(['streak', 'entries', 'words'] as BadgeCategory[]).map(category => {
+            const categoryBadges = getBadgesByCategory(category);
+            
             return (
-              <View key={badge.id} style={[styles.badgeItem, { opacity: isUnlocked ? 1 : 0.4 }]}>
-                <View style={[styles.badgeIcon, { backgroundColor: isUnlocked ? colors.primary + '20' : colors.surfaceHighlight }]}>
-                  <Icon name={badge.icon} size={24} color={isUnlocked ? colors.primary : colors.textMuted} />
+              <View key={category} style={styles.badgeCategorySection}>
+                <Typography variant="label" style={styles.categoryLabel}>{category.toUpperCase()}</Typography>
+                <View style={styles.categoryBadgesGrid}>
+                  {categoryBadges.map(badge => {
+                    const isUnlocked = unlockedBadges.some(b => b.id === badge.id);
+                    return (
+                      <TouchableOpacity
+                        key={badge.id}
+                        style={[styles.badgeItem, { opacity: isUnlocked ? 1 : 0.5 }]}
+                        onPress={() => setSelectedBadge(badge)}
+                      >
+                        <View style={[
+                          styles.badgeIcon,
+                          {
+                            backgroundColor: isUnlocked ? colors.primary + '20' : colors.surfaceHighlight,
+                            borderColor: isUnlocked ? colors.primary : 'transparent',
+                            borderWidth: 1
+                          }
+                        ]}>
+                          <Icon name={badge.icon} size={20} color={isUnlocked ? colors.primary : colors.textMuted} />
+                        </View>
+                        <Typography variant="caption" style={styles.badgeName} numberOfLines={1}>
+                          {badge.name}
+                        </Typography>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
-                <Typography variant="caption" style={{ textAlign: 'center', marginTop: 4 }}>{badge.name}</Typography>
               </View>
             );
           })}
@@ -234,6 +284,21 @@ export default function ProfileScreen() {
           <Typography style={styles.quoteAuthor} color={colors.textMuted}>— Mina Murray</Typography>
         </View>
       </ScrollView>
+
+      <EditProfileModal
+        visible={showEditProfile}
+        onClose={() => setShowEditProfile(false)}
+        initialName={userName === 'User' ? '' : userName}
+        initialDob={dob}
+        onUpdate={fetchSession}
+      />
+
+      <BadgeDetailsModal
+        visible={!!selectedBadge}
+        onClose={() => setSelectedBadge(null)}
+        badge={selectedBadge}
+        stats={stats}
+      />
     </ScreenLayout>
   );
 }
@@ -291,6 +356,17 @@ const styles = StyleSheet.create({
   profileTextBlock: {
     flex: 1,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  nameText: {
+    flexShrink: 1,
+  },
+  editButton: {
+    padding: 4,
+  },
   emailRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -300,6 +376,10 @@ const styles = StyleSheet.create({
   emailText: {
     flex: 1,
     marginRight: 8,
+  },
+  metaText: {
+    marginTop: 2,
+    opacity: 0.8,
   },
   stealthButton: {
     padding: 4,
@@ -345,23 +425,38 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
-  badgesGrid: {
+  badgesContainer: {
+    gap: 24,
+  },
+  badgeCategorySection: {
+    gap: 12,
+  },
+  categoryLabel: {
+    opacity: 0.7,
+    letterSpacing: 1,
+    fontSize: 12,
+  },
+  categoryBadgesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
-    justifyContent: 'center',
+    gap: 12,
   },
   badgeItem: {
     alignItems: 'center',
-    width: '30%',
+    width: '22%', // Fits 4 items roughly
   },
   badgeIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
+  },
+  badgeName: {
+    textAlign: 'center',
+    fontSize: 11,
+    width: '100%',
   },
   milestoneCard: {
     padding: 20,

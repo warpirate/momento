@@ -86,14 +86,6 @@ export default function CameraScreen() {
     setFlash(f => (f === 'off' ? 'on' : 'off'));
   }, []);
 
-  if (!hasPermission) {
-    return (
-      <View style={[styles.container, { backgroundColor: 'black', justifyContent: 'center', alignItems: 'center' }]}>
-        <Typography variant="body" color="white">Requesting camera permission...</Typography>
-      </View>
-    );
-  }
-
   if (device == null) {
     return (
       <View style={[styles.container, { backgroundColor: 'black', justifyContent: 'center', alignItems: 'center' }]}>

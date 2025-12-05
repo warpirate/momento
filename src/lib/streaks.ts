@@ -32,3 +32,19 @@ export function calculateStreak(dates: Date[]): number {
 
   return streak;
 }
+
+export function isStreakAtRisk(dates: Date[]): boolean {
+  if (dates.length === 0) return false;
+  
+  // Sort dates descending
+  const sortedDates = [...dates].sort((a, b) => b.getTime() - a.getTime());
+  const latestDate = sortedDates[0];
+  const today = new Date();
+  
+  // Check if the latest entry was yesterday (diff = 1)
+  // If diff is 0, they already journaled today, so not at risk.
+  // If diff > 1, streak is already broken (0), so technically not "at risk" of breaking a generic active streak, but we handle 0 separately.
+  const diffFromToday = differenceInCalendarDays(today, latestDate);
+  
+  return diffFromToday === 1;
+}
