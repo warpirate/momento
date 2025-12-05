@@ -7,7 +7,7 @@
 
 import {Session} from '@supabase/supabase-js';
 import React, {useEffect, useState} from 'react';
-import {ActivityIndicator, StatusBar, View} from 'react-native';
+import {ActivityIndicator, StatusBar, View, LogBox} from 'react-native';
 
 import {supabase} from './src/lib/supabaseClient';
 import {Navigation} from './src/navigation';
@@ -55,6 +55,11 @@ function AppContent(): React.JSX.Element {
     </>
   );
 }
+
+// Ignore specific warnings
+LogBox.ignoreLogs([
+  'JSI SQLiteAdapter not available',
+]);
 
 function App(): React.JSX.Element {
   return (

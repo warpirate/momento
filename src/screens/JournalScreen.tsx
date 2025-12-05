@@ -19,12 +19,14 @@ import { database } from '../db';
 import Entry from '../db/model/Entry';
 import { sync, setupRealtimeSubscription } from '../lib/sync';
 import { supabase, uploadFile } from '../lib/supabaseClient';
-import { calculateStreak } from '../lib/streaks';
+import { calculateStreak, isStreakAtRisk } from '../lib/streaks';
 import { useTheme } from '../theme/theme';
 import { ScreenLayout } from '../components/ui/ScreenLayout';
 import { Typography } from '../components/ui/Typography';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
+import { StreakStatus } from '../components/StreakStatus';
+import { StreakProgressModal } from '../components/StreakProgressModal';
 import Icon from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { JOURNAL_QUOTES } from '../content/quotes';
@@ -47,6 +49,7 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [syncInitialized, setSyncInitialized] = useState(false);
+  const [showStreakModal, setShowStreakModal] = useState(false);
   const { markHasUnsyncedEntries, isOnline } = useSyncContext();
 
   const draftKey = useMemo(() => `momento:draft:${userId}`, [userId]);
@@ -191,6 +194,11 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
     [sortedEntries],
   );
 
+  const isAtRisk = useMemo(
+    () => isStreakAtRisk(sortedEntries.map(e => e.createdAt)),
+    [sortedEntries],
+  );
+
   const onThisDayEntry = useMemo(() => {
     const today = new Date();
     return sortedEntries.find(entry => {
@@ -218,28 +226,11 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
           </View>
           <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
             {streak > 0 && (
-              <View
-                style={[
-                  styles.streakBadge,
-                  {
-                    backgroundColor: colors.secondary + '20',
-                    borderColor: colors.secondary,
-                  },
-                ]}
-              >
-                <MaterialCommunityIcon
-                  name="fire"
-                  size={14}
-                  color={colors.error}
-                />
-                <Typography
-                  variant="label"
-                  color={colors.secondary}
-                  style={{ marginLeft: 4 }}
-                >
-                  {streak}
-                </Typography>
-              </View>
+              <StreakStatus
+                streak={streak}
+                isAtRisk={isAtRisk}
+                onPress={() => setShowStreakModal(true)}
+              />
             )}
             <TouchableOpacity
               style={[
@@ -256,6 +247,12 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
           </View>
         </View>
         
+        <StreakProgressModal
+          visible={showStreakModal}
+          onClose={() => setShowStreakModal(false)}
+          currentStreak={streak}
+        />
+
         <EntryComposer
           value={draft}
           onChangeText={setDraft}

@@ -15,6 +15,7 @@ import Entry from '../db/model/Entry';
 import Icon from 'react-native-vector-icons/Feather';
 import { useAlert } from '../context/AlertContext';
 import { useSyncContext } from '../lib/SyncContext';
+import { UpdateModal } from '../components/ui/UpdateModal';
 
 const APP_VERSION = '0.0.4';
 const GITHUB_REPO = 'warpirate/momento';
@@ -73,6 +74,36 @@ export default function SettingsScreen() {
 
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState({ version: '', url: '', message: '' });
+  const [showInstallButton, setShowInstallButton] = useState(false);
+  const [downloadedFilePath, setDownloadedFilePath] = useState('');
+
+  const handleInstallUpdate = async () => {
+    try {
+      // Trigger install via native module
+      const { ApkInstaller } = NativeModules;
+      await ApkInstaller.install(downloadedFilePath);
+      
+      // Close modal after initiating install
+      setShowUpdateModal(false);
+      resetUpdateState();
+    } catch (error) {
+      console.error('Install failed:', error);
+      showAlert('Install Failed', 'Could not install the update. Please try again.');
+      setShowUpdateModal(false);
+      resetUpdateState();
+    }
+  };
+
+  const resetUpdateState = () => {
+    setIsDownloading(false);
+    setDownloadProgress(0);
+    setShowUpdateModal(false);
+    setUpdateInfo({ version: '', url: '', message: '' });
+    setShowInstallButton(false);
+    setDownloadedFilePath('');
+  };
 
   const downloadAndInstallApk = async (url: string, version: string) => {
     if (Platform.OS !== 'android') {
@@ -111,10 +142,8 @@ export default function SettingsScreen() {
       }
 
       setIsDownloading(false);
-
-      // Trigger install via native module
-      const { ApkInstaller } = NativeModules;
-      await ApkInstaller.install(destPath);
+      setDownloadedFilePath(destPath);
+      setShowInstallButton(true);
     } catch (error) {
       setIsDownloading(false);
       console.error('Update failed:', error);
@@ -138,14 +167,14 @@ export default function SettingsScreen() {
 
       if (updateAvailable) {
         if (Platform.OS === 'android' && apkAsset?.browser_download_url) {
-          showAlert(
-            'Update Available',
-            `A new version (${latestVersion}) is available. Download and install now?`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Update', onPress: () => downloadAndInstallApk(apkAsset.browser_download_url, latestVersion) }
-            ]
-          );
+          setUpdateInfo({
+            version: latestVersion,
+            url: apkAsset.browser_download_url,
+            message: `A new version (${latestVersion}) is available with improvements and bug fixes.`
+          });
+          setShowUpdateModal(true);
+          // Auto-start download for seamless experience
+          downloadAndInstallApk(apkAsset.browser_download_url, latestVersion);
         } else {
           showAlert(
             'Update Available',
@@ -255,6 +284,22 @@ export default function SettingsScreen() {
           <SettingItem label="Sign Out" onPress={handleSignOut} destructive />
         </View>
       </ScrollView>
+
+      {/* Update Modal */}
+      <UpdateModal
+        visible={showUpdateModal}
+        title="App Update Available"
+        message={updateInfo.message}
+        progress={downloadProgress}
+        isDownloading={isDownloading}
+        showInstallButton={showInstallButton}
+        onCancel={() => {
+          if (!isDownloading) {
+            resetUpdateState();
+          }
+        }}
+        onInstall={handleInstallUpdate}
+      />
     </ScreenLayout>
   );
 }
