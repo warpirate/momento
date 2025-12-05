@@ -17,7 +17,7 @@ import { useAlert } from '../context/AlertContext';
 import { useSyncContext } from '../lib/SyncContext';
 import { UpdateModal } from '../components/ui/UpdateModal';
 
-const APP_VERSION = '0.0.4';
+const APP_VERSION = '0.0.5';
 const GITHUB_REPO = 'warpirate/momento';
 
 const compareVersions = (v1: string, v2: string) => {
