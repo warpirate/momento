@@ -19,7 +19,7 @@ import { UpdateModal } from '../components/ui/UpdateModal';
 import { haptics } from '../lib/haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const APP_VERSION = '0.0.5';
+const APP_VERSION = '0.0.6';
 const GITHUB_REPO = 'warpirate/momento';
 
 const compareVersions = (v1: string, v2: string) => {
