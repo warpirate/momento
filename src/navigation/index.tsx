@@ -7,6 +7,7 @@ import { View, Text, Animated, TouchableWithoutFeedback, StyleSheet } from 'reac
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme/theme';
 import { useEffect, useRef } from 'react';
+import { haptics } from '../lib/haptics';
 
 // Screens
 import AuthScreen from '../screens/AuthScreen';
@@ -63,21 +64,18 @@ function TabBarIcon({
           Animated.timing(rotateAnim, { toValue: -0.1, duration: 100, useNativeDriver: true }),
           Animated.timing(rotateAnim, { toValue: 0, duration: 100, useNativeDriver: true }),
         ]).start();
-      } else if (route === 'Insights') {
-        // Pulse animation for chart icon
-        Animated.sequence([
-          Animated.timing(scaleAnim, { toValue: 1.3, duration: 150, useNativeDriver: true }),
-          Animated.timing(scaleAnim, { toValue: 1.2, duration: 150, useNativeDriver: true }),
-        ]).start();
-      } else if (route === 'Calendar') {
-        // Subtle bounce animation for calendar
+      } else if (route === 'History') {
+        // Subtle bounce animation for history
         Animated.sequence([
           Animated.timing(translateYAnim, { toValue: -4, duration: 200, useNativeDriver: true }),
           Animated.timing(translateYAnim, { toValue: -2, duration: 200, useNativeDriver: true }),
         ]).start();
-      } else if (route === 'Search') {
-        // Rotate animation for search
-        Animated.timing(rotateAnim, { toValue: 0.2, duration: 300, useNativeDriver: true }).start();
+      } else if (route === 'Profile') {
+        // Pulse animation for profile icon
+        Animated.sequence([
+          Animated.timing(scaleAnim, { toValue: 1.3, duration: 150, useNativeDriver: true }),
+          Animated.timing(scaleAnim, { toValue: 1.2, duration: 150, useNativeDriver: true }),
+        ]).start();
       }
     } else {
       // Reset animations when not focused
@@ -102,9 +100,8 @@ function TabBarIcon({
 
   let iconName = 'circle';
   if (route === 'Journal') iconName = 'edit-3';
-  else if (route === 'Insights') iconName = 'bar-chart-2';
-  else if (route === 'Calendar') iconName = 'calendar';
-  else if (route === 'Search') iconName = 'search';
+  else if (route === 'History') iconName = 'calendar';
+  else if (route === 'Profile') iconName = 'user';
 
   const rotate = rotateAnim.interpolate({
     inputRange: [-1, 1],
@@ -112,7 +109,7 @@ function TabBarIcon({
   });
 
   return (
-    <TouchableWithoutFeedback onPress={onPress}>
+    <TouchableWithoutFeedback onPress={() => { haptics.selection(); onPress(); }}>
       <View style={styles.tabContainer}>
         <AnimatedView 
           style={[
@@ -190,9 +187,8 @@ function MainTabs() {
       )}
     >
       <Tab.Screen name="Journal" component={JournalScreenWrapper} />
-      <Tab.Screen name="Insights" component={InsightsScreen} />
-      <Tab.Screen name="Calendar" component={CalendarScreen} />
-      <Tab.Screen name="Search" component={SearchScreen} />
+      <Tab.Screen name="History" component={CalendarScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
 }
@@ -232,15 +228,6 @@ const styles = StyleSheet.create({
 });
 
 export function Navigation({ session }: { session: any }) {
-  // Runtime guardrails: if any of these are undefined, log loudly so we see it
-  console.log('Navigation screens types:', {
-    AuthScreen: typeof AuthScreen,
-    MainTabs: typeof MainTabs,
-    EntryDetailScreen: typeof EntryDetailScreen,
-    SettingsScreen: typeof SettingsScreen,
-    ProfileScreen: typeof ProfileScreen,
-  });
-
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -256,6 +243,8 @@ export function Navigation({ session }: { session: any }) {
             <Stack.Screen name="RecentEntries" component={RecentEntriesScreen} />
             <Stack.Screen name="DailyEntries" component={DailyEntriesScreen} />
             <Stack.Screen name="Camera" component={CameraScreen} options={{ presentation: 'fullScreenModal' }} />
+            <Stack.Screen name="Search" component={SearchScreen} />
+            <Stack.Screen name="Insights" component={InsightsScreen} />
           </>
         )}
       </Stack.Navigator>

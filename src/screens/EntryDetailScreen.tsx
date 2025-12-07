@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, Dimensions, Animated } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
@@ -7,6 +7,7 @@ import { database } from '../db';
 import Entry from '../db/model/Entry';
 import { withObservables } from '@nozbe/watermelondb/react';
 import { sync } from '../lib/sync';
+import { supabase } from '../lib/supabaseClient';
 import { ScreenLayout } from '../components/ui/ScreenLayout';
 import { Typography } from '../components/ui/Typography';
 import { Card } from '../components/ui/Card';
@@ -14,20 +15,81 @@ import { useTheme } from '../theme/theme';
 import AudioRecorderPlayer from 'react-native-audio-recorder-player';
 import Icon from 'react-native-vector-icons/Feather';
 import { useAlert } from '../context/AlertContext';
+import { haptics } from '../lib/haptics';
 
 type EntryDetailRouteProp = RouteProp<RootStackParamList, 'EntryDetail'>;
 
 function EntryDetailScreen({ entry, signals }: { entry: Entry; signals: any[] }) {
-  console.log('Render EntryDetailScreen');
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors, spacing, borderRadius } = useTheme();
   const { showAlert } = useAlert();
   const [deleting, setDeleting] = useState(false);
-  
+  const [analysisStatus, setAnalysisStatus] = useState<'idle' | 'analyzing' | 'failed' | 'success'>('idle');
+  const [isRetrying, setIsRetrying] = useState(false);
+
   const audioRecorderPlayer = useRef(new AudioRecorderPlayer()).current;
   const [isPlaying, setIsPlaying] = useState(false);
   const [playTime, setPlayTime] = useState('00:00');
   const [duration, setDuration] = useState('00:00');
+
+  // Pulsing animation for analyzing state
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const entryAge = Date.now() - new Date(entry.createdAt).getTime();
+    const hasSignals = signals.length > 0;
+    
+    if (hasSignals) {
+      setAnalysisStatus('success');
+    } else if (entryAge < 120000) {
+      // Less than 2 minutes old - still analyzing
+      setAnalysisStatus('analyzing');
+    } else {
+      // Older than 2 minutes with no signals - likely failed
+      setAnalysisStatus('failed');
+    }
+  }, [signals.length, entry.createdAt]);
+
+  // Pulse animation for analyzing state
+  useEffect(() => {
+    if (analysisStatus === 'analyzing') {
+      const animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 0.6,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      animation.start();
+      return () => animation.stop();
+    }
+  }, [analysisStatus, pulseAnim]);
+
+  // Retry AI analysis
+  const handleRetryAnalysis = async () => {
+    setIsRetrying(true);
+    setAnalysisStatus('analyzing');
+    try {
+      await supabase.functions.invoke('analyze-entry', {
+        body: { record: { id: entry.id, content: entry.content } },
+      });
+      // Sync to pull the new signals
+      await sync();
+    } catch (error) {
+      console.error('Retry analysis failed:', error);
+      setAnalysisStatus('failed');
+      showAlert('Analysis Failed', 'Could not analyze this entry. Please check your connection and try again.');
+    } finally {
+      setIsRetrying(false);
+    }
+  };
 
   useEffect(() => {
     return () => {
@@ -83,6 +145,7 @@ function EntryDetailScreen({ entry, signals }: { entry: Entry; signals: any[] })
   }
 
   const handleDelete = () => {
+    haptics.warning();
     showAlert(
       'Delete Entry',
       'Are you sure you want to delete this entry? This cannot be undone.',
@@ -98,8 +161,10 @@ function EntryDetailScreen({ entry, signals }: { entry: Entry; signals: any[] })
                 await entry.markAsDeleted();
               });
               await sync();
+              haptics.success();
               navigation.goBack();
             } catch (error) {
+              haptics.error();
               showAlert('Error', 'Failed to delete entry');
               setDeleting(false);
             }
@@ -134,7 +199,7 @@ function EntryDetailScreen({ entry, signals }: { entry: Entry; signals: any[] })
         <Typography variant="body" color={colors.textMuted} style={styles.time}>
           {new Date(entry.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </Typography>
-        
+
         <View style={styles.signalsContainer}>
           {/* User Ratings */}
           {entry.moodRating && (
@@ -194,33 +259,156 @@ function EntryDetailScreen({ entry, signals }: { entry: Entry; signals: any[] })
           </View>
         )}
 
-        {latestSignal && (
+        {(latestSignal || analysisStatus !== 'idle') && (
           <Card style={styles.analysisSection}>
-            <Typography variant="subheading" style={styles.sectionTitle}>AI Analysis</Typography>
-            
-            {latestSignal.activities?.length > 0 && (
-              <View style={styles.metaGroup}>
-                <Typography variant="label" color={colors.textMuted}>Activities</Typography>
-                <View style={styles.tagsRow}>
-                  {latestSignal.activities.map((activity: string, index: number) => (
-                    <View key={index} style={[styles.tag, { backgroundColor: colors.surfaceHighlight }]}>
-                      <Typography variant="caption">{activity}</Typography>
-                    </View>
-                  ))}
+            <View style={styles.analysisTitleRow}>
+              <View style={styles.analysisTitleLeft}>
+                <Icon name="cpu" size={18} color={colors.primary} />
+                <Typography variant="subheading" style={styles.sectionTitle}>AI Analysis</Typography>
+              </View>
+              {analysisStatus === 'analyzing' && (
+                <Animated.View style={{ opacity: pulseAnim }}>
+                  <View style={[styles.statusBadge, { backgroundColor: colors.primary + '20' }]}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Typography variant="caption" color={colors.primary} style={{ marginLeft: 6 }}>Analyzing...</Typography>
+                  </View>
+                </Animated.View>
+              )}
+              {analysisStatus === 'success' && latestSignal && (
+                <View style={[styles.statusBadge, { backgroundColor: '#10b98120' }]}>
+                  <Icon name="check-circle" size={14} color="#10b981" />
+                  <Typography variant="caption" color="#10b981" style={{ marginLeft: 4 }}>Complete</Typography>
                 </View>
+              )}
+              {analysisStatus === 'failed' && (
+                <View style={[styles.statusBadge, { backgroundColor: '#f59e0b20' }]}>
+                  <Icon name="alert-circle" size={14} color="#f59e0b" />
+                  <Typography variant="caption" color="#f59e0b" style={{ marginLeft: 4 }}>Pending</Typography>
+                </View>
+              )}
+            </View>
+
+            {/* Analyzing State */}
+            {analysisStatus === 'analyzing' && !latestSignal && (
+              <View style={styles.statusPlaceholder}>
+                <Animated.View style={{ opacity: pulseAnim }}>
+                  <Icon name="loader" size={28} color={colors.primary} />
+                </Animated.View>
+                <Typography variant="body" color={colors.textMuted} style={{ marginTop: 12, textAlign: 'center' }}>
+                  AI is analyzing your entry...{"\n"}This usually takes a few seconds.
+                </Typography>
               </View>
             )}
 
-            {latestSignal.people?.length > 0 && (
-              <View style={styles.metaGroup}>
-                <Typography variant="label" color={colors.textMuted}>People</Typography>
-                <View style={styles.tagsRow}>
-                  {latestSignal.people.map((person: string, index: number) => (
-                    <View key={index} style={[styles.tag, { backgroundColor: colors.surfaceHighlight }]}>
-                      <Typography variant="caption">{person}</Typography>
+            {/* Failed/Pending State */}
+            {analysisStatus === 'failed' && !latestSignal && (
+              <View style={styles.statusPlaceholder}>
+                <Icon name="alert-triangle" size={28} color="#f59e0b" />
+                <Typography variant="body" color={colors.textMuted} style={{ marginTop: 12, textAlign: 'center' }}>
+                  Analysis is pending or may have failed.{"\n"}Check your connection and try again.
+                </Typography>
+                <TouchableOpacity
+                  style={[styles.retryButton, { backgroundColor: colors.primary }]}
+                  onPress={handleRetryAnalysis}
+                  disabled={isRetrying}
+                >
+                  {isRetrying ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Icon name="refresh-cw" size={14} color="#fff" />
+                      <Typography variant="label" color="#fff" style={{ marginLeft: 6 }}>Retry Analysis</Typography>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Success State - Show insights */}
+            {latestSignal && (
+              <View style={styles.analysisContent}>
+                {/* Mood & Sentiment Row */}
+                {(latestSignal.mood || latestSignal.sentimentScore !== undefined) && (
+                  <View style={styles.moodSentimentRow}>
+                    {latestSignal.mood && (
+                      <View style={[styles.moodCard, { backgroundColor: colors.primaryLight + '15' }]}>
+                        <Icon name="smile" size={16} color={colors.primary} />
+                        <View style={styles.moodCardText}>
+                          <Typography variant="caption" color={colors.textMuted}>Detected Mood</Typography>
+                          <Typography variant="body" style={{ fontWeight: '600' }}>{latestSignal.mood}</Typography>
+                        </View>
+                      </View>
+                    )}
+                    {latestSignal.sentimentScore !== undefined && (
+                      <View style={[styles.sentimentCard, { backgroundColor: latestSignal.sentimentScore >= 0 ? '#10b98115' : '#ef444415' }]}>
+                        <Icon 
+                          name={latestSignal.sentimentScore >= 0 ? 'trending-up' : 'trending-down'} 
+                          size={16} 
+                          color={latestSignal.sentimentScore >= 0 ? '#10b981' : '#ef4444'} 
+                        />
+                        <View style={styles.moodCardText}>
+                          <Typography variant="caption" color={colors.textMuted}>Sentiment</Typography>
+                          <Typography variant="body" style={{ fontWeight: '600' }}>
+                            {latestSignal.sentimentScore >= 0.5 ? 'Positive' : 
+                             latestSignal.sentimentScore <= -0.5 ? 'Negative' : 'Neutral'}
+                          </Typography>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* Activities */}
+                {latestSignal.activities?.length > 0 && (
+                  <View style={styles.metaGroup}>
+                    <View style={styles.metaHeader}>
+                      <Icon name="activity" size={14} color={colors.textMuted} />
+                      <Typography variant="label" color={colors.textMuted} style={{ marginLeft: 6 }}>Activities</Typography>
                     </View>
-                  ))}
-                </View>
+                    <View style={styles.tagsRow}>
+                      {latestSignal.activities.map((activity: string, index: number) => (
+                        <View key={index} style={[styles.tag, { backgroundColor: colors.surfaceHighlight }]}>
+                          <Typography variant="caption">{activity}</Typography>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {/* People */}
+                {latestSignal.people?.length > 0 && (
+                  <View style={styles.metaGroup}>
+                    <View style={styles.metaHeader}>
+                      <Icon name="users" size={14} color={colors.textMuted} />
+                      <Typography variant="label" color={colors.textMuted} style={{ marginLeft: 6 }}>People Mentioned</Typography>
+                    </View>
+                    <View style={styles.tagsRow}>
+                      {latestSignal.people.map((person: string, index: number) => (
+                        <View key={index} style={[styles.tag, { backgroundColor: colors.primaryLight + '20' }]}>
+                          <Icon name="user" size={10} color={colors.primary} style={{ marginRight: 4 }} />
+                          <Typography variant="caption" color={colors.primary}>{person}</Typography>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {/* Tags */}
+                {latestSignal.tags?.length > 0 && (
+                  <View style={styles.metaGroup}>
+                    <View style={styles.metaHeader}>
+                      <Icon name="hash" size={14} color={colors.textMuted} />
+                      <Typography variant="label" color={colors.textMuted} style={{ marginLeft: 6 }}>Tags</Typography>
+                    </View>
+                    <View style={styles.tagsRow}>
+                      {latestSignal.tags.map((tag: string, index: number) => (
+                        <View key={index} style={[styles.tagPill, { backgroundColor: colors.primary + '15', borderColor: colors.primary + '30' }]}>
+                          <Typography variant="caption" color={colors.primary}>#{tag}</Typography>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
               </View>
             )}
           </Card>
@@ -271,6 +459,7 @@ const styles = StyleSheet.create({
   },
   signalsContainer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
     marginBottom: 20,
   },
@@ -282,14 +471,73 @@ const styles = StyleSheet.create({
   },
   analysisSection: {
     padding: 20,
-    gap: 16,
     marginBottom: 40,
   },
+  analysisTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  analysisTitleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   sectionTitle: {
-    marginBottom: 8,
+    fontWeight: '600',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  statusPlaceholder: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 16,
+  },
+  analysisContent: {
+    gap: 16,
+  },
+  moodSentimentRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  moodCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    gap: 10,
+  },
+  sentimentCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    gap: 10,
+  },
+  moodCardText: {
+    gap: 2,
   },
   metaGroup: {
-    gap: 8,
+    gap: 10,
+  },
+  metaHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   tagsRow: {
     flexDirection: 'row',
@@ -297,9 +545,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   tag: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderRadius: 8,
+  },
+  tagPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
   },
 });
 

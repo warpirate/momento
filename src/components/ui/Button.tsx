@@ -1,6 +1,7 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle, TextStyle } from 'react-native';
 import { useTheme } from '../../theme/theme';
+import { haptics } from '../../lib/haptics';
 
 type ButtonProps = {
   title: string;
@@ -12,11 +13,14 @@ type ButtonProps = {
   style?: ViewStyle;
   textStyle?: TextStyle;
   icon?: React.ReactNode;
+  /** Optional haptics behavior. If omitted, a medium tap is used. Set to 'none' to disable. */
+  haptic?: 'none' | 'light' | 'medium' | 'heavy' | 'selection';
 };
 
 export function Button({
   title,
   onPress,
+
   variant = 'primary',
   size = 'medium',
   loading = false,
@@ -24,6 +28,7 @@ export function Button({
   style,
   textStyle,
   icon,
+  haptic,
 }: ButtonProps) {
   const { colors, borderRadius, spacing } = useTheme();
 
@@ -80,9 +85,34 @@ export function Button({
     }
   };
 
+  const handlePress = () => {
+    if (disabled || loading) return;
+
+    // Default haptic for buttons unless explicitly disabled
+    if (haptic !== 'none') {
+      switch (haptic) {
+        case 'light':
+          haptics.light();
+          break;
+        case 'heavy':
+          haptics.heavy();
+          break;
+        case 'selection':
+          haptics.selection();
+          break;
+        case 'medium':
+        default:
+          haptics.medium();
+          break;
+      }
+    }
+
+    onPress();
+  };
+
   return (
     <TouchableOpacity
-      onPress={onPress}
+      onPress={handlePress}
       disabled={disabled || loading}
       style={[
         styles.button,

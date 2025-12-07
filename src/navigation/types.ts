@@ -10,11 +10,12 @@ export type RootStackParamList = {
   RecentEntries: undefined;
   DailyEntries: { date: string };
   Camera: { onMediaCaptured: (uri: string, type: 'photo' | 'video') => void };
+  Search: undefined;
+  Insights: undefined;
 };
 
 export type MainTabParamList = {
   Journal: undefined;
-  Insights: undefined;
-  Calendar: undefined;
-  Search: undefined;
+  History: undefined;
+  Profile: undefined;
 };

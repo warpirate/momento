@@ -29,17 +29,20 @@ import { StreakStatus } from '../components/StreakStatus';
 import { StreakProgressModal } from '../components/StreakProgressModal';
 import Icon from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { JOURNAL_QUOTES } from '../content/quotes';
 import { useSyncContext } from '../lib/SyncContext';
 import { useAlert } from '../context/AlertContext';
+import { haptics } from '../lib/haptics';
+import { TrendAlertCard } from '../components/TrendAlertCard';
+import { analyzeTrends, TrendAlert, EntrySignal } from '../lib/trendAnalysis';
+import EntrySignalModel from '../db/model/EntrySignal';
 
 type JournalScreenProps = {
   userId: string;
   entries: Entry[];
+  signals: EntrySignalModel[];
 };
 
-function JournalScreen({ userId, entries }: JournalScreenProps) {
-  console.log('Render JournalScreen with entries:', entries.length);
+function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors, spacing } = useTheme();
   const { showAlert } = useAlert();
@@ -50,6 +53,7 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [syncInitialized, setSyncInitialized] = useState(false);
   const [showStreakModal, setShowStreakModal] = useState(false);
+  const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([]);
   const { markHasUnsyncedEntries, isOnline } = useSyncContext();
 
   const draftKey = useMemo(() => `momento:draft:${userId}`, [userId]);
@@ -164,7 +168,9 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
       setImages([]);
       setVoiceNote(undefined);
       await AsyncStorage.removeItem(draftKey);
+      haptics.success();
     } catch (error) {
+      haptics.error();
       showAlert('Save failed', (error as Error).message);
     } finally {
       setSaving(false);
@@ -211,10 +217,49 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
     });
   }, [sortedEntries]);
 
-  const quote = useMemo(
-    () => JOURNAL_QUOTES[Math.floor(Math.random() * JOURNAL_QUOTES.length)],
-    [],
-  );
+  // Get a random past entry as inspiration (not from today)
+  const pastEntryQuote = useMemo(() => {
+    const today = new Date();
+    const pastEntries = sortedEntries.filter(entry => {
+      const date = entry.createdAt;
+      return !(
+        date.getDate() === today.getDate() &&
+        date.getMonth() === today.getMonth() &&
+        date.getFullYear() === today.getFullYear()
+      );
+    });
+    
+    if (pastEntries.length === 0) return null;
+    
+    // Get a random entry
+    const randomEntry = pastEntries[Math.floor(Math.random() * pastEntries.length)];
+    const daysAgo = Math.floor((today.getTime() - randomEntry.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+    
+    return {
+      content: randomEntry.content.slice(0, 150) + (randomEntry.content.length > 150 ? '...' : ''),
+      daysAgo,
+      id: randomEntry.id,
+    };
+  }, [sortedEntries]);
+
+  // Analyze trends and generate alerts
+  const trendAlerts = useMemo(() => {
+    const signalsData: EntrySignal[] = signals.map(s => ({
+      id: s.id,
+      entryId: s.id, // Use signal ID as proxy since entry relation is lazy
+      mood: s.mood || undefined,
+      sentimentScore: s.sentimentScore ?? undefined,
+      activities: s.activities || undefined,
+      people: s.people || undefined,
+    }));
+    
+    const alerts = analyzeTrends(sortedEntries, signalsData);
+    return alerts.filter(a => !dismissedAlerts.includes(a.type));
+  }, [sortedEntries, signals, dismissedAlerts]);
+
+  const handleDismissAlert = (alertType: string) => {
+    setDismissedAlerts(prev => [...prev, alertType]);
+  };
 
   return (
     <ScreenLayout>
@@ -232,6 +277,18 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
                 onPress={() => setShowStreakModal(true)}
               />
             )}
+            <TouchableOpacity
+              style={[
+                styles.settingsButton,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.surfaceHighlight,
+                },
+              ]}
+              onPress={() => navigation.navigate('Search')}
+            >
+              <Icon name="search" size={18} color={colors.textPrimary} />
+            </TouchableOpacity>
             <TouchableOpacity
               style={[
                 styles.settingsButton,
@@ -270,6 +327,14 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
           style={{ marginTop: spacing.m }}
         />
 
+        {trendAlerts.map((alert) => (
+          <TrendAlertCard
+            key={alert.type}
+            alert={alert}
+            onDismiss={() => handleDismissAlert(alert.type)}
+          />
+        ))}
+
         {onThisDayEntry && (
           <OnThisDayCard
             entry={onThisDayEntry}
@@ -280,21 +345,28 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
           />
         )}
 
-        <View style={styles.quoteCard}>
-          <View style={{ flex: 1, justifyContent: 'center' }}>
+        {pastEntryQuote && (
+          <TouchableOpacity 
+            style={[styles.pastEntryCard, { backgroundColor: colors.surface, borderColor: colors.surfaceHighlight }]}
+            onPress={() => navigation.navigate('EntryDetail', { entryId: pastEntryQuote.id })}
+            activeOpacity={0.8}
+          >
+            <View style={styles.pastEntryHeader}>
+              <Icon name="clock" size={14} color={colors.textMuted} />
+              <Typography variant="caption" color={colors.textMuted}>
+                {pastEntryQuote.daysAgo === 1 ? 'Yesterday' : `${pastEntryQuote.daysAgo} days ago`}
+              </Typography>
+            </View>
             <Typography
               variant="body"
-              align="center"
-              style={{ marginBottom: 8 }}
+              color={colors.textSecondary}
+              style={{ fontStyle: 'italic' }}
               numberOfLines={3}
             >
-              “{quote.text}”
+              "{pastEntryQuote.content}"
             </Typography>
-            <Typography variant="caption" align="center">
-              — {quote.author}
-            </Typography>
-          </View>
-        </View>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           activeOpacity={0.8}
@@ -404,13 +476,17 @@ const styles = StyleSheet.create({
   sectionHeader: {
     marginBottom: 12,
   },
-  quoteCard: {
-    marginTop: 32,
-    paddingHorizontal: 24,
-    paddingVertical: 24,
-    borderRadius: 24,
-    height: 160,
-    justifyContent: 'center',
+  pastEntryCard: {
+    marginTop: 20,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  pastEntryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
   },
   recentEntriesButton: {
     marginTop: 32,
@@ -426,12 +502,12 @@ const styles = StyleSheet.create({
 
 const enhance = withObservables(['userId'], ({ userId }) => ({
   entries: database.get<Entry>('entries').query().observe(),
+  signals: database.get<EntrySignalModel>('entry_signals').query().observe(),
 }));
 
 import { Session } from '@supabase/supabase-js';
 
 export default function JournalScreenWrapper() {
-  console.log('Render JournalScreenWrapper');
   const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
