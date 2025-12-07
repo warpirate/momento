@@ -12,6 +12,10 @@ export type EntryPreview = {
   hasImages?: boolean;
   hasVideos?: boolean;
   hasVoiceNote?: boolean;
+  // AI-extracted data
+  aiMood?: string;
+  aiTags?: string[];
+  sentimentScore?: number;
 };
 
 type EntryPreviewCardProps = {
@@ -21,13 +25,33 @@ type EntryPreviewCardProps = {
 export function EntryPreviewCard({ item }: EntryPreviewCardProps) {
   const { colors, spacing } = useTheme();
   const previewText = item.content.trim();
+  
+  // Determine mood color based on sentiment
+  const getMoodColor = () => {
+    if (item.sentimentScore !== undefined) {
+      if (item.sentimentScore >= 0.3) return '#10b981'; // Green for positive
+      if (item.sentimentScore <= -0.3) return '#ef4444'; // Red for negative
+    }
+    return colors.primary; // Default primary for neutral
+  };
 
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
-        <Typography variant="caption" color={colors.primary}>
-          {item.createdAt}
-        </Typography>
+        <View style={styles.headerLeft}>
+          <Typography variant="caption" color={colors.primary}>
+            {item.createdAt}
+          </Typography>
+          {/* AI Mood Badge */}
+          {item.aiMood && (
+            <View style={[styles.moodBadge, { backgroundColor: getMoodColor() + '15', borderColor: getMoodColor() + '30' }]}>
+              <Icon name="smile" size={10} color={getMoodColor()} />
+              <Typography variant="caption" color={getMoodColor()} style={styles.moodText}>
+                {item.aiMood}
+              </Typography>
+            </View>
+          )}
+        </View>
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           {item.hasVoiceNote && (
             <Icon name="mic" size={14} color={colors.textMuted} />
@@ -38,22 +62,26 @@ export function EntryPreviewCard({ item }: EntryPreviewCardProps) {
           {item.hasImages && (
             <Icon name="image" size={14} color={colors.textMuted} />
           )}
-          {item.tags && item.tags.length > 0 && (
-            <View style={styles.tagsContainer}>
-              {item.tags.slice(0, 2).map((tag, index) => (
-                <View key={index} style={[styles.tag, { backgroundColor: colors.primaryLight + '20' }]}>
-                  <Typography variant="caption" color={colors.primary} style={styles.tagText}>
-                    {tag}
-                  </Typography>
-                </View>
-              ))}
-            </View>
-          )}
         </View>
       </View>
-      <Typography variant="body" numberOfLines={4} style={styles.excerpt}>
+      <Typography variant="body" numberOfLines={3} style={styles.excerpt}>
         {previewText}
       </Typography>
+      {/* AI Tags Row */}
+      {item.aiTags && item.aiTags.length > 0 && (
+        <View style={styles.aiTagsRow}>
+          {item.aiTags.slice(0, 3).map((tag, index) => (
+            <View key={index} style={[styles.aiTag, { backgroundColor: colors.surfaceHighlight }]}>
+              <Typography variant="caption" color={colors.textMuted} style={styles.tagText}>
+                #{tag}
+              </Typography>
+            </View>
+          ))}
+          {item.aiTags.length > 3 && (
+            <Typography variant="caption" color={colors.textMuted}>+{item.aiTags.length - 3}</Typography>
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -64,28 +92,47 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     paddingVertical: 12,
   },
-  tagsContainer: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  tag: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-  },
-  tagText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  excerpt: {
-    lineHeight: 22,
-    marginTop: 4,
-  },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  moodBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 4,
+  },
+  moodText: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  excerpt: {
+    lineHeight: 22,
+  },
+  aiTagsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+  },
+  aiTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  tagText: {
+    fontSize: 11,
   },
 });
 

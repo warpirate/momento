@@ -46,15 +46,21 @@ export async function sync() {
         console.log('Pulled changes:', changes);
 
         // Fix for "Server wants client to create record... but it already exists locally"
-        // Check if any "created" entries already exist locally and move them to "updated"
+        // 1) entries table
         if (changes.entries?.created?.length > 0) {
           const createdIds = changes.entries.created.map((e: any) => e.id);
           try {
-            const existingRecords = await database.get('entries').query(Q.where('id', Q.oneOf(createdIds))).fetch();
+            const existingRecords = await database
+              .get('entries')
+              .query(Q.where('id', Q.oneOf(createdIds)))
+              .fetch();
             const existingIds = new Set(existingRecords.map(r => r.id));
 
             if (existingIds.size > 0) {
-              console.log('Found existing records in created list, moving to updated:', Array.from(existingIds));
+              console.log(
+                'Found existing entry records in created list, moving to updated:',
+                Array.from(existingIds),
+              );
               const newCreated: any[] = [];
               const newUpdated = changes.entries.updated || [];
 
@@ -70,7 +76,41 @@ export async function sync() {
               changes.entries.updated = newUpdated;
             }
           } catch (err) {
-            console.warn('Error checking for existing records:', err);
+            console.warn('Error checking for existing entry records:', err);
+          }
+        }
+
+        // 2) entry_signals table
+        if (changes.entry_signals?.created?.length > 0) {
+          const createdSignalIds = changes.entry_signals.created.map((s: any) => s.id);
+          try {
+            const existingSignalRecords = await database
+              .get('entry_signals')
+              .query(Q.where('id', Q.oneOf(createdSignalIds)))
+              .fetch();
+            const existingSignalIds = new Set(existingSignalRecords.map(r => r.id));
+
+            if (existingSignalIds.size > 0) {
+              console.log(
+                'Found existing entry_signals records in created list, moving to updated:',
+                Array.from(existingSignalIds),
+              );
+              const newCreatedSignals: any[] = [];
+              const newUpdatedSignals = changes.entry_signals.updated || [];
+
+              for (const signal of changes.entry_signals.created) {
+                if (existingSignalIds.has(signal.id)) {
+                  newUpdatedSignals.push(signal);
+                } else {
+                  newCreatedSignals.push(signal);
+                }
+              }
+
+              changes.entry_signals.created = newCreatedSignals;
+              changes.entry_signals.updated = newUpdatedSignals;
+            }
+          } catch (err) {
+            console.warn('Error checking for existing entry_signals records:', err);
           }
         }
 

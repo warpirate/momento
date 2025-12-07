@@ -27,7 +27,10 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
 }) => {
   const { colors, spacing, borderRadius } = useTheme();
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const spinAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
+  // Progress bar animation
   useEffect(() => {
     Animated.timing(progressAnim, {
       toValue: progress,
@@ -35,6 +38,51 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
       useNativeDriver: false,
     }).start();
   }, [progress, progressAnim]);
+
+  // Spinning and pulsing animation for download icon
+  useEffect(() => {
+    if (isDownloading) {
+      // Continuous spin animation
+      const spinAnimation = Animated.loop(
+        Animated.timing(spinAnim, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        })
+      );
+
+      // Pulsing scale animation
+      const pulseAnimation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.15,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+
+      spinAnimation.start();
+      pulseAnimation.start();
+
+      return () => {
+        spinAnimation.stop();
+        pulseAnimation.stop();
+        spinAnim.setValue(0);
+        pulseAnim.setValue(1);
+      };
+    }
+  }, [isDownloading, spinAnim, pulseAnim]);
+
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   if (!visible) return null;
 
@@ -85,15 +133,33 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
             {message}
           </Typography>
 
-          {/* Progress Section */}
+          {/* Downloading Animation Section */}
           {isDownloading && (
-            <View style={styles.progressSection}>
+            <View style={styles.downloadingSection}>
+              {/* Animated Download Icon */}
+              <Animated.View
+                style={[
+                  styles.downloadIconContainer,
+                  {
+                    backgroundColor: colors.primary + '15',
+                    transform: [{ scale: pulseAnim }, { rotate: spin }],
+                  },
+                ]}
+              >
+                <View style={[styles.downloadIconInner, { backgroundColor: colors.primary + '25' }]}>
+                  <Icon name="download" size={32} color={colors.primary} />
+                </View>
+              </Animated.View>
+
+              {/* Status Text */}
+              <Typography variant="body" color={colors.textPrimary} style={styles.downloadingText}>
+                Downloading Update...
+              </Typography>
+
+              {/* Progress Info */}
               <View style={styles.progressInfo}>
                 <Typography variant="caption" color={colors.textMuted}>
-                  Downloading...
-                </Typography>
-                <Typography variant="caption" color={colors.primary}>
-                  {progress}%
+                  {progress}% complete
                 </Typography>
               </View>
               
@@ -110,20 +176,21 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
                 />
               </View>
 
-              {/* Animated dots indicator */}
+              {/* Animated wave dots */}
               <View style={styles.dotsContainer}>
                 {[0, 1, 2].map((index) => (
                   <Animated.View
                     key={index}
                     style={[
-                      styles.dot,
+                      styles.waveDot,
                       {
                         backgroundColor: colors.primary,
-                        opacity: progressAnim.interpolate({
-                          inputRange: [0, 100],
-                          outputRange: [0.3, 1],
-                          extrapolate: 'clamp',
-                        }),
+                        transform: [{
+                          scale: pulseAnim.interpolate({
+                            inputRange: [1, 1.15],
+                            outputRange: [0.6 + index * 0.2, 1],
+                          }),
+                        }],
                       },
                     ]}
                   />
@@ -225,12 +292,30 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     lineHeight: 20,
   },
-  progressSection: {
+  downloadingSection: {
+    alignItems: 'center',
     marginBottom: 24,
   },
+  downloadIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  downloadIconInner: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  downloadingText: {
+    fontWeight: '600',
+    marginBottom: 8,
+  },
   progressInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
   },
@@ -239,6 +324,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     overflow: 'hidden',
     marginBottom: 16,
+    width: '100%',
   },
   progressBar: {
     height: '100%',
@@ -250,10 +336,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  waveDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   installSection: {
     alignItems: 'center',

@@ -16,6 +16,8 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useAlert } from '../context/AlertContext';
 import { useSyncContext } from '../lib/SyncContext';
 import { UpdateModal } from '../components/ui/UpdateModal';
+import { haptics } from '../lib/haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const APP_VERSION = '0.0.3';
 const GITHUB_REPO = 'warpirate/momento';
@@ -33,7 +35,6 @@ const compareVersions = (v1: string, v2: string) => {
 };
 
 export default function SettingsScreen() {
-  console.log('Render SettingsScreen');
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors, spacing, borderRadius, themeMode, setThemeMode } = useTheme();
   const { showAlert } = useAlert();
@@ -46,30 +47,95 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleExportData = async () => {
+  const handleExportData = async (format: 'json' | 'markdown' = 'json') => {
     try {
       const entries = await database.get<Entry>('entries').query().fetch();
-      const data = entries.map(entry => ({
-        id: entry.id,
-        content: entry.content,
-        createdAt: entry.createdAt,
-        updatedAt: entry.updatedAt,
-        moodRating: entry.moodRating,
-        sleepRating: entry.sleepRating,
-        energyRating: entry.energyRating,
-        images: entry.images,
-        voiceNote: entry.voiceNote,
-      }));
+      
+      let exportContent: string;
+      let title: string;
 
-      const json = JSON.stringify(data, null, 2);
+      if (format === 'markdown') {
+        // Export as Markdown
+        exportContent = entries
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .map(entry => {
+            const date = new Date(entry.createdAt).toLocaleDateString(undefined, {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            });
+            const time = new Date(entry.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return `## ${date} at ${time}\n\n${entry.content}\n\n---\n`;
+          })
+          .join('\n');
+        title = 'Momento Journal Export (Markdown)';
+      } else {
+        // Export as JSON
+        const data = entries.map(entry => ({
+          id: entry.id,
+          content: entry.content,
+          createdAt: entry.createdAt,
+          updatedAt: entry.updatedAt,
+          moodRating: entry.moodRating,
+          sleepRating: entry.sleepRating,
+          energyRating: entry.energyRating,
+          images: entry.images,
+          voiceNote: entry.voiceNote,
+        }));
+        exportContent = JSON.stringify(data, null, 2);
+        title = 'Momento Journal Export (JSON)';
+      }
       
       await Share.share({
-        message: json,
-        title: 'Momento Journal Export',
+        message: exportContent,
+        title,
       });
+      haptics.success();
     } catch (error) {
+      haptics.error();
       showAlert('Export failed', (error as Error).message);
     }
+  };
+
+  const handleExportChoice = () => {
+    showAlert(
+      'Export Format',
+      'Choose export format for your journal entries',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'JSON', onPress: () => handleExportData('json') },
+        { text: 'Markdown', onPress: () => handleExportData('markdown') },
+      ]
+    );
+  };
+
+  const handleClearLocalData = () => {
+    haptics.warning();
+    showAlert(
+      'Clear Local Data',
+      'This will delete all locally cached data. Your synced data in the cloud will remain safe. You will need to sync again to restore your entries.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await database.write(async () => {
+                await database.unsafeResetDatabase();
+              });
+              await AsyncStorage.clear();
+              haptics.success();
+              showAlert('Done', 'Local data cleared. Please restart the app and sync to restore your data.');
+            } catch (error) {
+              haptics.error();
+              showAlert('Error', 'Failed to clear local data.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const [isDownloading, setIsDownloading] = useState(false);
@@ -115,7 +181,7 @@ export default function SettingsScreen() {
     try {
       setIsDownloading(true);
       setDownloadProgress(0);
-
+      
       const fileName = `momento-${version}.apk`;
       const destPath = `${RNFS.CachesDirectoryPath}/${fileName}`;
 
@@ -144,6 +210,9 @@ export default function SettingsScreen() {
       setIsDownloading(false);
       setDownloadedFilePath(destPath);
       setShowInstallButton(true);
+      
+      // Show completion notification
+      showAlert('Download Complete', 'The update has been downloaded successfully and is ready to install.');
     } catch (error) {
       setIsDownloading(false);
       console.error('Update failed:', error);
@@ -246,12 +315,8 @@ export default function SettingsScreen() {
 
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.surfaceHighlight, borderRadius: borderRadius.l }]}>
           <Typography variant="label" color={colors.textMuted} style={styles.sectionTitle}>DATA</Typography>
-          <SettingItem label="Export Data" onPress={handleExportData} />
-          <SettingItem
-            label={isSyncing ? "Syncing..." : "Sync Now"}
-            onPress={sync}
-            value={lastSyncAt ? `Last synced: ${lastSyncAt.toLocaleString()}` : 'Never synced'}
-          />
+          <SettingItem label="Export Data" onPress={handleExportChoice} value="JSON or Markdown format" />
+          <SettingItem label="Clear Local Data" onPress={handleClearLocalData} value="Reset local cache (cloud data preserved)" />
         </View>
 
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.surfaceHighlight, borderRadius: borderRadius.l }]}>

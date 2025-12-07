@@ -125,3 +125,5 @@ fastlane/screenshots
 Thumbs.db
 
 package-lock.json
+
+docs

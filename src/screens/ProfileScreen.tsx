@@ -14,9 +14,8 @@ import { Card } from '../components/ui/Card';
 import { useTheme } from '../theme/theme';
 import Icon from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { BADGES, getUnlockedBadges, Badge, getBadgesByCategory, BadgeCategory } from '../lib/gamification';
+import { getUnlockedBadges } from '../lib/gamification';
 import { EditProfileModal } from '../components/EditProfileModal';
-import { BadgeDetailsModal } from '../components/BadgeDetailsModal';
 
 type ProfileStats = {
   totalEntries: number;
@@ -26,7 +25,6 @@ type ProfileStats = {
 };
 
 export default function ProfileScreen() {
-  console.log('Render ProfileScreen');
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors, spacing, borderRadius } = useTheme();
 
@@ -40,7 +38,6 @@ export default function ProfileScreen() {
   const [session, setSession] = useState<Session | null>(null);
   const [stealthMode, setStealthMode] = useState(true);
   const [showEditProfile, setShowEditProfile] = useState(false);
-  const [selectedBadge, setSelectedBadge] = useState<Badge | null>(null);
 
   const fetchSession = async () => {
     const { data } = await supabase.auth.getSession();
@@ -83,7 +80,6 @@ export default function ProfileScreen() {
 
   const email = session?.user?.email ?? 'Unknown email';
   const userName = session?.user?.user_metadata?.name || session?.user?.user_metadata?.full_name || email.split('@')[0] || 'User';
-  const dob = session?.user?.user_metadata?.date_of_birth || '';
 
   const accountCreatedAt = useMemo(() => {
     const created = session?.user?.created_at;
@@ -185,14 +181,6 @@ export default function ProfileScreen() {
             </View>
 
             <Typography variant="caption" style={styles.metaText}>
-              {dob ? `Born ${new Date(dob).toLocaleDateString(undefined, {
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric'
-              })}` : 'Add your birthday'}
-            </Typography>
-
-            <Typography variant="caption" style={styles.metaText}>
               {accountCreatedAt
                 ? `Member since ${accountCreatedAt.toLocaleDateString(undefined, {
                     month: 'long',
@@ -222,48 +210,6 @@ export default function ProfileScreen() {
           />
         </View>
 
-        <View style={styles.sectionHeaderRow}>
-          <Typography variant="subheading">Badges</Typography>
-        </View>
-
-        <View style={styles.badgesContainer}>
-          {(['streak', 'entries', 'words'] as BadgeCategory[]).map(category => {
-            const categoryBadges = getBadgesByCategory(category);
-            
-            return (
-              <View key={category} style={styles.badgeCategorySection}>
-                <Typography variant="label" style={styles.categoryLabel}>{category.toUpperCase()}</Typography>
-                <View style={styles.categoryBadgesGrid}>
-                  {categoryBadges.map(badge => {
-                    const isUnlocked = unlockedBadges.some(b => b.id === badge.id);
-                    return (
-                      <TouchableOpacity
-                        key={badge.id}
-                        style={[styles.badgeItem, { opacity: isUnlocked ? 1 : 0.5 }]}
-                        onPress={() => setSelectedBadge(badge)}
-                      >
-                        <View style={[
-                          styles.badgeIcon,
-                          {
-                            backgroundColor: isUnlocked ? colors.primary + '20' : colors.surfaceHighlight,
-                            borderColor: isUnlocked ? colors.primary : 'transparent',
-                            borderWidth: 1
-                          }
-                        ]}>
-                          <Icon name={badge.icon} size={20} color={isUnlocked ? colors.primary : colors.textMuted} />
-                        </View>
-                        <Typography variant="caption" style={styles.badgeName} numberOfLines={1}>
-                          {badge.name}
-                        </Typography>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            );
-          })}
-        </View>
-
         <Card style={styles.milestoneCard}>
           <Typography variant="label" color={colors.textMuted} style={styles.milestoneTitle}>JOURNALING SINCE</Typography>
           <Typography variant="subheading">
@@ -277,28 +223,16 @@ export default function ProfileScreen() {
           </Typography>
         </Card>
 
-        <View style={styles.quoteCard}>
-          <Typography style={styles.quoteText} color={colors.textSecondary}>
-            "Journaling is like whispering to one's self and listening at the same time."
-          </Typography>
-          <Typography style={styles.quoteAuthor} color={colors.textMuted}>— Mina Murray</Typography>
-        </View>
       </ScrollView>
 
       <EditProfileModal
         visible={showEditProfile}
         onClose={() => setShowEditProfile(false)}
         initialName={userName === 'User' ? '' : userName}
-        initialDob={dob}
+        initialDob=""
         onUpdate={fetchSession}
       />
 
-      <BadgeDetailsModal
-        visible={!!selectedBadge}
-        onClose={() => setSelectedBadge(null)}
-        badge={selectedBadge}
-        stats={stats}
-      />
     </ScreenLayout>
   );
 }
