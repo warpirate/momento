@@ -22,6 +22,7 @@ import RecentEntriesScreen from '../screens/RecentEntriesScreen';
 import EditEntryScreen from '../screens/EditEntryScreen';
 import CameraScreen from '../screens/CameraScreen';
 import DailyEntriesScreen from '../screens/DailyEntriesScreen';
+import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -245,6 +246,7 @@ export function Navigation({ session }: { session: any }) {
             <Stack.Screen name="Camera" component={CameraScreen} options={{ presentation: 'fullScreenModal' }} />
             <Stack.Screen name="Search" component={SearchScreen} />
             <Stack.Screen name="Insights" component={InsightsScreen} />
+            <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
           </>
         )}
       </Stack.Navigator>

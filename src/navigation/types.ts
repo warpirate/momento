@@ -12,6 +12,7 @@ export type RootStackParamList = {
   Camera: { onMediaCaptured: (uri: string, type: 'photo' | 'video') => void };
   Search: undefined;
   Insights: undefined;
+  NotificationSettings: undefined;
 };
 
 export type MainTabParamList = {
