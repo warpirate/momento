@@ -18,6 +18,7 @@ import { useSyncContext } from '../lib/SyncContext';
 import { UpdateModal } from '../components/ui/UpdateModal';
 import { haptics } from '../lib/haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import appPackage from '../../package.json';
 
 const APP_VERSION = '0.0.6';
 const GITHUB_REPO = 'warpirate/momento';
@@ -309,7 +310,7 @@ export default function SettingsScreen() {
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.surfaceHighlight, borderRadius: borderRadius.l }]}>
           <Typography variant="label" color={colors.textMuted} style={styles.sectionTitle}>ACCOUNT</Typography>
           <SettingItem label="Profile" onPress={() => navigation.navigate('Profile')} />
-          <SettingItem label="Notifications" onPress={() => showAlert('Coming soon', 'This feature is under development.')} />
+          <SettingItem label="Notifications" onPress={() => navigation.navigate('NotificationSettings')} />
           <SettingItem label="Privacy" onPress={() => showAlert('Coming soon', 'This feature is under development.')} />
         </View>
 

@@ -130,7 +130,10 @@ export default function ProfileScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Icon name="arrow-left" size={24} color={colors.primary} />
         </TouchableOpacity>
-        <Typography variant="heading">Account</Typography>
+        <Typography variant="heading" style={styles.headerTitle}>Account</Typography>
+        <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={styles.settingsButton}>
+          <Icon name="settings" size={24} color={colors.primary} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={[styles.content, { padding: spacing.m }]}>
@@ -243,7 +246,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 20,
   },
+  headerTitle: {
+    flex: 1,
+  },
   backButton: {
+    padding: 8,
+  },
+  settingsButton: {
     padding: 8,
   },
   content: {

@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Session } from '@supabase/supabase-js';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
@@ -35,6 +36,19 @@ import { haptics } from '../lib/haptics';
 import { TrendAlertCard } from '../components/TrendAlertCard';
 import { analyzeTrends, TrendAlert, EntrySignal } from '../lib/trendAnalysis';
 import EntrySignalModel from '../db/model/EntrySignal';
+import { NotificationBell } from '../components/NotificationBell';
+import { NotificationInbox } from '../components/NotificationInbox';
+import { useNotifications } from '../context/NotificationContext';
+import { 
+  checkStreakNotifications, 
+  checkAchievementNotifications, 
+  checkInsightNotifications,
+  getTotalWords 
+} from '../lib/notificationTriggers';
+import { 
+  shouldSendNotification, 
+  markNotificationSent 
+} from '../lib/notificationLifecycle';
 
 type JournalScreenProps = {
   userId: string;
@@ -44,6 +58,7 @@ type JournalScreenProps = {
 
 function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const rootNavigation = navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
   const { colors, spacing } = useTheme();
   const { showAlert } = useAlert();
   const [draft, setDraft] = useState('');
@@ -54,6 +69,8 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
   const [syncInitialized, setSyncInitialized] = useState(false);
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([]);
+  const [showNotificationInbox, setShowNotificationInbox] = useState(false);
+  const { createNotification, showToast } = useNotifications();
   const { markHasUnsyncedEntries, isOnline } = useSyncContext();
 
   const draftKey = useMemo(() => `momento:draft:${userId}`, [userId]);
@@ -169,11 +186,88 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
       setVoiceNote(undefined);
       await AsyncStorage.removeItem(draftKey);
       haptics.success();
+
+      // Check for notification triggers after successful save
+      checkNotificationTriggers();
     } catch (error) {
       haptics.error();
       showAlert('Save failed', (error as Error).message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Check and trigger notifications based on user activity
+  async function checkNotificationTriggers() {
+    try {
+      const allEntries = await database.get<Entry>('entries').query().fetch();
+      const allSignals = await database.get<EntrySignalModel>('entry_signals').query().fetch();
+
+      // Get previous stats from storage
+      const statsKey = `momento:stats:${userId}`;
+      const storedStats = await AsyncStorage.getItem(statsKey);
+      const previousStats = storedStats ? JSON.parse(storedStats) : {
+        streak: 0,
+        totalEntries: 0,
+        totalWords: 0,
+      };
+
+      // Calculate current stats
+      const currentStreak = calculateStreak(allEntries.map(e => e.createdAt));
+      const totalEntries = allEntries.length;
+      const totalWords = getTotalWords(allEntries);
+
+      // Check for streak milestones (with deduplication)
+      const streakNotifs = checkStreakNotifications(allEntries, previousStats.streak);
+      for (const notif of streakNotifs) {
+        if (notif.shouldNotify && notif.type && notif.title && notif.message) {
+          const shouldSend = await shouldSendNotification(`streak_${notif.data?.milestone}`, 7 * 24 * 60 * 60 * 1000); // 7 day cooldown
+          if (shouldSend) {
+            await createNotification(notif.type, notif.title, notif.message, notif.data, false);
+            showToast(notif.title, notif.message, 'success');
+            await markNotificationSent(`streak_${notif.data?.milestone}`);
+          }
+        }
+      }
+
+      // Check for achievement unlocks (with deduplication)
+      const achievementNotifs = checkAchievementNotifications(
+        totalEntries,
+        currentStreak,
+        totalWords,
+        previousStats.totalEntries,
+        previousStats.streak,
+        previousStats.totalWords
+      );
+      for (const notif of achievementNotifs) {
+        if (notif.shouldNotify && notif.type && notif.title && notif.message) {
+          const shouldSend = await shouldSendNotification(`achievement_${notif.data?.badgeId}`, 24 * 60 * 60 * 1000); // 24 hour cooldown
+          if (shouldSend) {
+            await createNotification(notif.type, notif.title, notif.message, notif.data, false);
+            showToast(notif.title, notif.message, 'success');
+            await markNotificationSent(`achievement_${notif.data?.badgeId}`);
+          }
+        }
+      }
+
+      // Check for insights (less frequently - only if we have enough data)
+      if (allEntries.length >= 7 && allEntries.length % 5 === 0) {
+        const insightNotifs = checkInsightNotifications(allEntries, allSignals);
+        for (const notif of insightNotifs) {
+          if (notif.shouldNotify && notif.type && notif.title && notif.message) {
+            await createNotification(notif.type, notif.title, notif.message, notif.data, false);
+          }
+        }
+      }
+
+      // Save current stats for next comparison
+      await AsyncStorage.setItem(statsKey, JSON.stringify({
+        streak: currentStreak,
+        totalEntries,
+        totalWords,
+      }));
+    } catch (error) {
+      console.error('Error checking notification triggers:', error);
     }
   }
 
@@ -277,29 +371,25 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
                 onPress={() => setShowStreakModal(true)}
               />
             )}
+            <NotificationBell onPress={() => setShowNotificationInbox(true)} />
             <TouchableOpacity
               style={[
-                styles.settingsButton,
+                styles.iconButton,
                 {
                   backgroundColor: colors.surface,
                   borderColor: colors.surfaceHighlight,
                 },
               ]}
-              onPress={() => navigation.navigate('Search')}
+              onPress={() => {
+                // Search lives on the root stack, not inside the Main tab navigator
+                if (rootNavigation) {
+                  rootNavigation.navigate('Search');
+                } else {
+                  navigation.navigate('Search');
+                }
+              }}
             >
               <Icon name="search" size={18} color={colors.textPrimary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.settingsButton,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.surfaceHighlight,
-                },
-              ]}
-              onPress={() => navigation.navigate('Settings')}
-            >
-              <Icon name="settings" size={18} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
         </View>
@@ -384,6 +474,11 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
           <Icon name="arrow-right" size={20} color={colors.primary} />
         </TouchableOpacity>
       </View>
+
+      <NotificationInbox
+        visible={showNotificationInbox}
+        onClose={() => setShowNotificationInbox(false)}
+      />
     </ScreenLayout>
   );
 }
@@ -466,7 +561,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  settingsButton: {
+  iconButton: {
     padding: 8,
     borderRadius: 20,
     borderWidth: 1,
@@ -504,8 +599,6 @@ const enhance = withObservables(['userId'], ({ userId }) => ({
   entries: database.get<Entry>('entries').query().observe(),
   signals: database.get<EntrySignalModel>('entry_signals').query().observe(),
 }));
-
-import { Session } from '@supabase/supabase-js';
 
 export default function JournalScreenWrapper() {
   const [session, setSession] = useState<Session | null>(null);

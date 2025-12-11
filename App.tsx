@@ -8,6 +8,7 @@
 import {Session} from '@supabase/supabase-js';
 import React, {useEffect, useState} from 'react';
 import {ActivityIndicator, StatusBar, View, LogBox} from 'react-native';
+import {SafeAreaProvider} from 'react-native-safe-area-context';
 
 import {supabase} from './src/lib/supabaseClient';
 import {Navigation} from './src/navigation';
@@ -16,6 +17,8 @@ import {ThemeProvider} from './src/theme/ThemeContext';
 import {useTheme} from './src/theme/theme';
 import { SyncProvider } from './src/lib/SyncContext';
 import { AlertProvider } from './src/context/AlertContext';
+import { NotificationProvider } from './src/context/NotificationContext';
+import { NotificationToast } from './src/components/NotificationToast';
 
 function AppContent(): React.JSX.Element {
   const [session, setSession] = useState<Session | null>(null);
@@ -63,13 +66,18 @@ LogBox.ignoreLogs([
 
 function App(): React.JSX.Element {
   return (
-    <ThemeProvider>
-      <AlertProvider>
-        <SyncProvider>
-          <AppContent />
-        </SyncProvider>
-      </AlertProvider>
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <AlertProvider>
+          <NotificationProvider>
+            <SyncProvider>
+              <AppContent />
+              <NotificationToast />
+            </SyncProvider>
+          </NotificationProvider>
+        </AlertProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
 

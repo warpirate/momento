@@ -105,7 +105,7 @@ function EntryDetailScreen({ entry, signals }: { entry: Entry; signals: any[] })
     console.log(msg);
     audioRecorderPlayer.addPlayBackListener((e) => {
       // Format time as mm:ss
-      const rawPlayTime = audioRecorderPlayer.mmss(Math.floor(e.currentPosition / 1000));
+      const rawPlayTime = audioRecorderPlayer.mmss(Math.floor(e.currentPosition));
       const playParts = rawPlayTime.split(':');
       if (playParts.length >= 2) {
         setPlayTime(`${playParts[0]}:${playParts[1]}`);
@@ -113,7 +113,7 @@ function EntryDetailScreen({ entry, signals }: { entry: Entry; signals: any[] })
         setPlayTime(rawPlayTime);
       }
 
-      const rawDuration = audioRecorderPlayer.mmss(Math.floor(e.duration / 1000));
+      const rawDuration = audioRecorderPlayer.mmss(Math.floor(e.duration));
       const durationParts = rawDuration.split(':');
       if (durationParts.length >= 2) {
         setDuration(`${durationParts[0]}:${durationParts[1]}`);
