@@ -23,6 +23,9 @@ import EditEntryScreen from '../screens/EditEntryScreen';
 import CameraScreen from '../screens/CameraScreen';
 import DailyEntriesScreen from '../screens/DailyEntriesScreen';
 import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
+import FeedbackScreen from '../screens/FeedbackScreen';
+import PreviousFeedbackScreen from '../screens/PreviousFeedbackScreen';
+import FeedbackDetailScreen from '../screens/FeedbackDetailScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -247,6 +250,9 @@ export function Navigation({ session }: { session: any }) {
             <Stack.Screen name="Search" component={SearchScreen} />
             <Stack.Screen name="Insights" component={InsightsScreen} />
             <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
+            <Stack.Screen name="Feedback" component={FeedbackScreen} />
+            <Stack.Screen name="PreviousFeedback" component={PreviousFeedbackScreen} />
+            <Stack.Screen name="FeedbackDetail" component={FeedbackDetailScreen} />
           </>
         )}
       </Stack.Navigator>

@@ -13,6 +13,9 @@ export type RootStackParamList = {
   Search: undefined;
   Insights: undefined;
   NotificationSettings: undefined;
+  Feedback: undefined;
+  PreviousFeedback: undefined;
+  FeedbackDetail: { feedbackId: string };
 };
 
 export type MainTabParamList = {

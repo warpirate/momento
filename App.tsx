@@ -15,15 +15,20 @@ import {Navigation} from './src/navigation';
 import {Logo} from './src/components/ui/Logo';
 import {ThemeProvider} from './src/theme/ThemeContext';
 import {useTheme} from './src/theme/theme';
-import { SyncProvider } from './src/lib/SyncContext';
-import { AlertProvider } from './src/context/AlertContext';
-import { NotificationProvider } from './src/context/NotificationContext';
-import { NotificationToast } from './src/components/NotificationToast';
+import {SyncProvider} from './src/lib/SyncContext';
+import {AlertProvider} from './src/context/AlertContext';
+import {NotificationProvider} from './src/context/NotificationContext';
+import {NotificationToast} from './src/components/NotificationToast';
+import {WhatsNewModal} from './src/components/ui/WhatsNewModal';
+import {getWhatsNewToShow, markWhatsNewSeen, WhatsNewPayload} from './src/lib/whatsNew';
 
 function AppContent(): React.JSX.Element {
   const [session, setSession] = useState<Session | null>(null);
   const [initializing, setInitializing] = useState(true);
-  const { colors } = useTheme();
+  const {colors} = useTheme();
+
+  const [whatsNew, setWhatsNew] = useState<WhatsNewPayload | null>(null);
+  const [isWhatsNewVisible, setIsWhatsNewVisible] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({data}) => {
@@ -42,6 +47,29 @@ function AppContent(): React.JSX.Element {
     };
   }, []);
 
+  useEffect(() => {
+    if (initializing) return;
+
+    let isMounted = true;
+    (async () => {
+      const payload = await getWhatsNewToShow();
+      if (!isMounted || !payload) return;
+      setWhatsNew(payload);
+      setIsWhatsNewVisible(true);
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [initializing]);
+
+  const closeWhatsNew = async () => {
+    if (whatsNew) {
+      await markWhatsNewSeen(whatsNew.version);
+    }
+    setIsWhatsNewVisible(false);
+  };
+
   if (initializing) {
     return (
       <View style={{flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center'}}>
@@ -55,6 +83,13 @@ function AppContent(): React.JSX.Element {
     <>
       <StatusBar barStyle={colors.background === '#0F172A' ? 'light-content' : 'dark-content'} />
       <Navigation session={session} />
+      {whatsNew && (
+        <WhatsNewModal
+          visible={isWhatsNewVisible}
+          content={whatsNew}
+          onClose={closeWhatsNew}
+        />
+      )}
     </>
   );
 }
