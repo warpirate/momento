@@ -41,6 +41,13 @@ export default function SettingsScreen() {
   const { showAlert } = useAlert();
   const { sync, isSyncing, lastSyncAt } = useSyncContext();
 
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState({ version: '', url: '', message: '' });
+  const [showInstallButton, setShowInstallButton] = useState(false);
+  const [downloadedFilePath, setDownloadedFilePath] = useState('');
+
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
@@ -138,13 +145,6 @@ export default function SettingsScreen() {
       ]
     );
   };
-
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState(0);
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [updateInfo, setUpdateInfo] = useState({ version: '', url: '', message: '' });
-  const [showInstallButton, setShowInstallButton] = useState(false);
-  const [downloadedFilePath, setDownloadedFilePath] = useState('');
 
   const handleInstallUpdate = async () => {
     try {
@@ -311,6 +311,8 @@ export default function SettingsScreen() {
           <Typography variant="label" color={colors.textMuted} style={styles.sectionTitle}>ACCOUNT</Typography>
           <SettingItem label="Profile" onPress={() => navigation.navigate('Profile')} />
           <SettingItem label="Notifications" onPress={() => navigation.navigate('NotificationSettings')} />
+          <SettingItem label="Send Feedback" onPress={() => navigation.navigate('Feedback')} />
+          <SettingItem label="Previous Feedback" onPress={() => navigation.navigate('PreviousFeedback')} />
           <SettingItem label="Privacy" onPress={() => showAlert('Coming soon', 'This feature is under development.')} />
         </View>
 
