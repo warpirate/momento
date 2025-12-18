@@ -265,7 +265,7 @@ export function EntryComposer({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${supabaseAnonKey}`,
         },
-        body: JSON.stringify({ content: original, mode: 'improve' }),
+        body: JSON.stringify({ content: original }),
         signal: abortController.signal,
       });
 
@@ -278,7 +278,7 @@ export function EntryComposer({
       // If streaming is unavailable, fall back to a non-streaming invoke and animate typing.
       if (!res.body) {
         const { data, error } = await supabase.functions.invoke('analyze-entry', {
-          body: { content: original, mode: 'improve' },
+          body: { content: original },
         });
         if (error) throw error;
         const enhanced = (data as any)?.enhanced as string | undefined;
