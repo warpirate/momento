@@ -20,7 +20,6 @@ import { haptics } from '../lib/haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import appPackage from '../../package.json';
 
-const APP_VERSION = '0.0.10';
 const GITHUB_REPO = 'warpirate/momento';
 
 const LAST_UPDATE_CHECK_KEY = 'momento:last_update_check';
