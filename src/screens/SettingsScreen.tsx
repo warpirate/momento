@@ -20,7 +20,7 @@ import { haptics } from '../lib/haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import appPackage from '../../package.json';
 
-const PACKAGE_JSON_VERSION = (appPackage.version as string) ?? '0.0.0';
+const APP_VERSION = '0.0.7';
 const GITHUB_REPO = 'warpirate/momento';
 
 const LAST_UPDATE_CHECK_KEY = 'momento:last_update_check';
@@ -45,11 +45,11 @@ const getInstalledAppVersion = (): { versionName: string; versionCode?: number }
     // On Android this is sourced from versionName/versionCode.
     const { PlatformConstants } = NativeModules as any;
     const constants = PlatformConstants?.getConstants?.() ?? PlatformConstants;
-    const versionName = (constants?.Version as string) ?? PACKAGE_JSON_VERSION;
+    const versionName = (constants?.Version as string) ?? (appPackage.version as string) ?? '0.0.0';
     const versionCode = typeof constants?.Release === 'number' ? constants.Release : undefined;
     return { versionName, versionCode };
   } catch {
-    return { versionName: PACKAGE_JSON_VERSION };
+    return { versionName: (appPackage.version as string) ?? '0.0.0' };
   }
 };
 
