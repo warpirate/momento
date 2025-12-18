@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView, Share, Linking, Platform, NativeModules, Switch } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, TouchableOpacity, ScrollView, Share, Linking, Platform, NativeModules } from 'react-native';
 import RNFS from 'react-native-fs';
 import { supabase } from '../lib/supabaseClient';
 import { useNavigation } from '@react-navigation/native';
@@ -20,15 +20,12 @@ import { haptics } from '../lib/haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import appPackage from '../../package.json';
 
+const APP_VERSION = '0.0.10';
 const GITHUB_REPO = 'warpirate/momento';
-
-const LAST_UPDATE_CHECK_KEY = 'momento:last_update_check';
-const AI_ENHANCE_KEY = 'momento:ai_enhance_enabled';
 
 const compareVersions = (v1: string, v2: string) => {
   const parts1 = v1.split('.').map(Number);
   const parts2 = v2.split('.').map(Number);
-
   for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
     const p1 = parts1[i] || 0;
     const p2 = parts2[i] || 0;
@@ -38,30 +35,11 @@ const compareVersions = (v1: string, v2: string) => {
   return 0;
 };
 
-const getInstalledAppVersion = (): { versionName: string; versionCode?: number } => {
-  try {
-    // React Native exposes app version via native constants.
-    // On Android this is sourced from versionName/versionCode.
-    const { PlatformConstants } = NativeModules as any;
-    const constants = PlatformConstants?.getConstants?.() ?? PlatformConstants;
-    const versionName = (constants?.Version as string) ?? (appPackage.version as string) ?? '0.0.0';
-    const versionCode = typeof constants?.Release === 'number' ? constants.Release : undefined;
-    return { versionName, versionCode };
-  } catch {
-    return { versionName: (appPackage.version as string) ?? '0.0.0' };
-  }
-};
-
 export default function SettingsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors, spacing, borderRadius, themeMode, setThemeMode } = useTheme();
   const { showAlert } = useAlert();
   const { sync, isSyncing, lastSyncAt } = useSyncContext();
-
-  const [aiEnhanceEnabled, setAiEnhanceEnabled] = useState(false);
-
-  const installed = useMemo(() => getInstalledAppVersion(), []);
-  const installedVersionName = installed.versionName;
 
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
@@ -243,38 +221,16 @@ export default function SettingsScreen() {
     }
   };
 
-  const checkForUpdates = async (options?: { silent?: boolean }) => {
+  const checkForUpdates = async () => {
     try {
-      const silent = options?.silent ?? false;
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
-      const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'User-Agent': 'MomentoApp',
-        },
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
+      const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
       if (!response.ok) {
-        const rawText = await response.text().catch(() => '');
-
-        if (response.status === 403 && rawText.toLowerCase().includes('rate limit')) {
-          throw new Error('GitHub rate limit exceeded');
-        }
-
-        throw new Error(`Failed to fetch release info (${response.status})`);
+        throw new Error('Failed to fetch release info');
       }
       const data = await response.json();
-
-      if (!data?.tag_name || typeof data.tag_name !== 'string') {
-        throw new Error('No release found');
-      }
-
       const latestVersion = data.tag_name.replace(/^v/, '');
 
-      const updateAvailable = compareVersions(latestVersion, installedVersionName) > 0;
+      const updateAvailable = compareVersions(latestVersion, APP_VERSION) > 0;
       const apkAsset = data.assets?.find((asset: { browser_download_url: string }) =>
         asset.browser_download_url.toLowerCase().endsWith('.apk')
       );
@@ -302,65 +258,9 @@ export default function SettingsScreen() {
         return;
       }
 
-      if (!silent) {
-        showAlert('Up to date', 'You are using the latest version of Momento.');
-      }
+      showAlert('Up to date', 'You are using the latest version of Momento.');
     } catch (error) {
-      if (options?.silent) return;
-
-      const message = error instanceof Error ? error.message : 'Failed to check for updates.';
-      if (message === 'GitHub rate limit exceeded') {
-        showAlert('Error', 'Too many update checks right now. Please try again in a few minutes.');
-        return;
-      }
-
-      if (message === 'No release found') {
-        showAlert('Error', 'No updates are available right now.');
-        return;
-      }
-
-      if (message === 'AbortError') {
-        showAlert('Error', 'Update check timed out. Please try again.');
-        return;
-      }
-
       showAlert('Error', 'Failed to check for updates.');
-    }
-  };
-
-  useEffect(() => {
-    const maybeAutoCheck = async () => {
-      try {
-        const now = Date.now();
-        const last = await AsyncStorage.getItem(LAST_UPDATE_CHECK_KEY);
-        const lastTs = last ? parseInt(last, 10) : 0;
-        const ONE_DAY = 24 * 60 * 60 * 1000;
-        if (now - lastTs < ONE_DAY) return;
-
-        await AsyncStorage.setItem(LAST_UPDATE_CHECK_KEY, now.toString());
-        await checkForUpdates({ silent: true });
-      } catch {
-        // ignore
-      }
-    };
-
-    maybeAutoCheck();
-  }, [installedVersionName]);
-
-  useEffect(() => {
-    AsyncStorage.getItem(AI_ENHANCE_KEY)
-      .then((enabledValue) => setAiEnhanceEnabled(enabledValue === 'true'))
-      .catch(() => {
-        // ignore
-      });
-  }, []);
-
-  const handleToggleAiEnhance = async (value: boolean) => {
-    setAiEnhanceEnabled(value);
-    try {
-      await AsyncStorage.setItem(AI_ENHANCE_KEY, value ? 'true' : 'false');
-    } catch {
-      // ignore
     }
   };
 
@@ -423,26 +323,6 @@ export default function SettingsScreen() {
         </View>
 
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.surfaceHighlight, borderRadius: borderRadius.l }]}>
-          <Typography variant="label" color={colors.textMuted} style={styles.sectionTitle}>AI</Typography>
-          <View style={[styles.toggleItem, { borderBottomColor: colors.surfaceHighlight }]}>
-            <View style={{ flex: 1 }}>
-              <Typography style={styles.itemLabel} color={colors.textPrimary}>
-                AI Enhance
-              </Typography>
-              <Typography variant="caption" color={colors.textMuted} style={{ marginTop: 4 }}>
-                Show an Enhance button in the journal composer
-              </Typography>
-            </View>
-            <Switch
-              value={aiEnhanceEnabled}
-              onValueChange={handleToggleAiEnhance}
-              trackColor={{ false: colors.surfaceHighlight, true: colors.primary }}
-              thumbColor="#fff"
-            />
-          </View>
-        </View>
-
-        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.surfaceHighlight, borderRadius: borderRadius.l }]}>
           <Typography variant="label" color={colors.textMuted} style={styles.sectionTitle}>APP</Typography>
           <View style={styles.themeSection}>
             <Typography variant="body" color={colors.textPrimary} style={styles.themeLabel}>
@@ -459,10 +339,10 @@ export default function SettingsScreen() {
             label="About Momento"
             onPress={() => showAlert(
               'Momento',
-              `Version ${installedVersionName}`,
+              `Version ${APP_VERSION}`,
               [
                 { text: 'OK' },
-                { text: 'Check for Updates', onPress: () => checkForUpdates() }
+                { text: 'Check for Updates', onPress: checkForUpdates }
               ]
             )}
           />
@@ -534,12 +414,6 @@ const styles = StyleSheet.create({
   item: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-  },
-  toggleItem: {
-    flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,

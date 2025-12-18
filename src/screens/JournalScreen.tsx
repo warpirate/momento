@@ -33,12 +33,16 @@ import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIc
 import { useSyncContext } from '../lib/SyncContext';
 import { useAlert } from '../context/AlertContext';
 import { haptics } from '../lib/haptics';
+import { TrendAlertCard } from '../components/TrendAlertCard';
+import { analyzeTrends, TrendAlert, EntrySignal } from '../lib/trendAnalysis';
+import EntrySignalModel from '../db/model/EntrySignal';
 import { NotificationBell } from '../components/NotificationBell';
 import { NotificationInbox } from '../components/NotificationInbox';
 import { useNotifications } from '../context/NotificationContext';
 import { 
   checkStreakNotifications, 
   checkAchievementNotifications, 
+  checkInsightNotifications,
   getTotalWords 
 } from '../lib/notificationTriggers';
 import { 
@@ -49,9 +53,10 @@ import {
 type JournalScreenProps = {
   userId: string;
   entries: Entry[];
+  signals: EntrySignalModel[];
 };
 
-function JournalScreen({ userId, entries }: JournalScreenProps) {
+function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const rootNavigation = navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
   const { colors, spacing } = useTheme();
@@ -63,6 +68,7 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [syncInitialized, setSyncInitialized] = useState(false);
   const [showStreakModal, setShowStreakModal] = useState(false);
+  const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([]);
   const [showNotificationInbox, setShowNotificationInbox] = useState(false);
   const { createNotification, showToast } = useNotifications();
   const { markHasUnsyncedEntries, isOnline } = useSyncContext();
@@ -169,7 +175,11 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
       // Mark that we have local changes that need to be synced and analyzed.
       markHasUnsyncedEntries();
 
-      sync().catch(err => console.error('Sync after save failed:', err));
+      sync().then(() => {
+        supabase.functions.invoke('analyze-entry', {
+          body: { record: { id: newEntry.id, content: newEntry.content } },
+        }).then(() => sync());
+      });
 
       setDraft('');
       setImages([]);
@@ -191,6 +201,7 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
   async function checkNotificationTriggers() {
     try {
       const allEntries = await database.get<Entry>('entries').query().fetch();
+      const allSignals = await database.get<EntrySignalModel>('entry_signals').query().fetch();
 
       // Get previous stats from storage
       const statsKey = `momento:stats:${userId}`;
@@ -239,6 +250,15 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
         }
       }
 
+      // Check for insights (less frequently - only if we have enough data)
+      if (allEntries.length >= 7 && allEntries.length % 5 === 0) {
+        const insightNotifs = checkInsightNotifications(allEntries, allSignals);
+        for (const notif of insightNotifs) {
+          if (notif.shouldNotify && notif.type && notif.title && notif.message) {
+            await createNotification(notif.type, notif.title, notif.message, notif.data, false);
+          }
+        }
+      }
 
       // Save current stats for next comparison
       await AsyncStorage.setItem(statsKey, JSON.stringify({
@@ -316,6 +336,24 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
     };
   }, [sortedEntries]);
 
+  // Analyze trends and generate alerts
+  const trendAlerts = useMemo(() => {
+    const signalsData: EntrySignal[] = signals.map(s => ({
+      id: s.id,
+      entryId: s.id, // Use signal ID as proxy since entry relation is lazy
+      mood: s.mood || undefined,
+      sentimentScore: s.sentimentScore ?? undefined,
+      activities: s.activities || undefined,
+      people: s.people || undefined,
+    }));
+    
+    const alerts = analyzeTrends(sortedEntries, signalsData);
+    return alerts.filter(a => !dismissedAlerts.includes(a.type));
+  }, [sortedEntries, signals, dismissedAlerts]);
+
+  const handleDismissAlert = (alertType: string) => {
+    setDismissedAlerts(prev => [...prev, alertType]);
+  };
 
   return (
     <ScreenLayout>
@@ -379,6 +417,13 @@ function JournalScreen({ userId, entries }: JournalScreenProps) {
           style={{ marginTop: spacing.m }}
         />
 
+        {trendAlerts.map((alert) => (
+          <TrendAlertCard
+            key={alert.type}
+            alert={alert}
+            onDismiss={() => handleDismissAlert(alert.type)}
+          />
+        ))}
 
         {onThisDayEntry && (
           <OnThisDayCard
@@ -552,6 +597,7 @@ const styles = StyleSheet.create({
 
 const enhance = withObservables(['userId'], ({ userId }) => ({
   entries: database.get<Entry>('entries').query().observe(),
+  signals: database.get<EntrySignalModel>('entry_signals').query().observe(),
 }));
 
 export default function JournalScreenWrapper() {

@@ -36,6 +36,11 @@ jobs:
       - name: Set VERSION env
         run: echo "VERSION=$(node -p \"require('./package.json').version\")" >> $GITHUB_ENV
 
+      - name: Create/Update git tag
+        run: |
+          git tag -a "v${{ env.VERSION }}" -m "Release v${{ env.VERSION }}" -f
+          git push origin "v${{ env.VERSION }}" --force
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -58,5 +63,7 @@ jobs:
           name: Release v${{ env.VERSION }}
           files: android/app/build/outputs/apk/release/Momento-v${{ env.VERSION }}.apk
           generate_release_notes: true
+          fail_on_unmatched_files: true
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
