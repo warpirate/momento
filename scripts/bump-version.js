@@ -33,14 +33,11 @@ buildGradle = buildGradle.replace(
 );
 
 // Update versionCode
-const versionCodeMatch = buildGradle.match(/versionCode (\d+)/);
-if (versionCodeMatch) {
-  const currentVersionCode = parseInt(versionCodeMatch[1], 10);
-  const newVersionCode = currentVersionCode + 1;
-  buildGradle = buildGradle.replace(
-    /versionCode \d+/,
-    `versionCode ${newVersionCode}`
-  );
+// Requirement: versionCode should increase as 15,16,17... matching the patch number.
+// This also prevents drifting versionCode if someone manually edits build.gradle.
+const newVersionCode = Number.isFinite(newPatch) ? newPatch : undefined;
+if (typeof newVersionCode === 'number') {
+  buildGradle = buildGradle.replace(/versionCode \d+/, `versionCode ${newVersionCode}`);
   console.log(`New versionCode: ${newVersionCode}`);
 }
 
