@@ -246,11 +246,32 @@ export default function SettingsScreen() {
   const checkForUpdates = async (options?: { silent?: boolean }) => {
     try {
       const silent = options?.silent ?? false;
-      const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'MomentoApp',
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
       if (!response.ok) {
-        throw new Error('Failed to fetch release info');
+        const rawText = await response.text().catch(() => '');
+
+        if (response.status === 403 && rawText.toLowerCase().includes('rate limit')) {
+          throw new Error('GitHub rate limit exceeded');
+        }
+
+        throw new Error(`Failed to fetch release info (${response.status})`);
       }
       const data = await response.json();
+
+      if (!data?.tag_name || typeof data.tag_name !== 'string') {
+        throw new Error('No release found');
+      }
+
       const latestVersion = data.tag_name.replace(/^v/, '');
 
       const updateAvailable = compareVersions(latestVersion, installedVersionName) > 0;
@@ -285,9 +306,25 @@ export default function SettingsScreen() {
         showAlert('Up to date', 'You are using the latest version of Momento.');
       }
     } catch (error) {
-      if (!options?.silent) {
-        showAlert('Error', 'Failed to check for updates.');
+      if (options?.silent) return;
+
+      const message = error instanceof Error ? error.message : 'Failed to check for updates.';
+      if (message === 'GitHub rate limit exceeded') {
+        showAlert('Error', 'Too many update checks right now. Please try again in a few minutes.');
+        return;
       }
+
+      if (message === 'No release found') {
+        showAlert('Error', 'No updates are available right now.');
+        return;
+      }
+
+      if (message === 'AbortError') {
+        showAlert('Error', 'Update check timed out. Please try again.');
+        return;
+      }
+
+      showAlert('Error', 'Failed to check for updates.');
     }
   };
 
