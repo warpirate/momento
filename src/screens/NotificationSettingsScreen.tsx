@@ -20,12 +20,20 @@ import { useAlert } from '../context/AlertContext';
 import { notificationService } from '../lib/notificationService';
 import { haptics } from '../lib/haptics';
 
+const TIME_OPTIONS = [
+  { label: 'Morning (8:00 AM)', value: '08:00' },
+  { label: 'Afternoon (2:00 PM)', value: '14:00' },
+  { label: 'Evening (6:00 PM)', value: '18:00' },
+  { label: 'Night (9:00 PM)', value: '21:00' },
+  { label: 'Late Night (10:00 PM)', value: '22:00' },
+];
+
 export default function NotificationSettingsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors, spacing, borderRadius } = useTheme();
   const { preferences, updatePreferences } = useNotifications();
   const { showAlert } = useAlert();
-  const [showQuietHoursPicker, setShowQuietHoursPicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   const handleToggle = async (key: keyof typeof preferences, value: boolean) => {
     haptics.selection();
@@ -43,17 +51,30 @@ export default function NotificationSettingsScreen() {
     }
 
     await updatePreferences({ [key]: value });
+
+    // Schedule/cancel daily reminder based on toggle
+    if (key === 'enabled' || key === 'dailyReminder') {
+      if (value && preferences.enabled) {
+        await notificationService.scheduleDailyReminder(preferences.reminderTime);
+      }
+    }
   };
 
-  const handleIntensityChange = async (intensity: 'standard' | 'supportive') => {
+  const handleTimeChange = async (time: string) => {
     haptics.selection();
-    await updatePreferences({ dayPackIntensity: intensity });
+    await updatePreferences({ reminderTime: time });
+    setShowTimePicker(false);
+    
+    if (preferences.enabled && preferences.dailyReminder) {
+      await notificationService.scheduleDailyReminder(time);
+    }
   };
 
-  const handleQuietHoursChange = async (quietHoursStart: string, quietHoursEnd: string) => {
-    haptics.selection();
-    await updatePreferences({ quietHoursStart, quietHoursEnd });
-    setShowQuietHoursPicker(false);
+  const formatTime = (time: string) => {
+    const [hours, minutes] = time.split(':').map(Number);
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = hours % 12 || 12;
+    return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
   };
 
   const SettingRow = ({
@@ -129,7 +150,7 @@ export default function NotificationSettingsScreen() {
           />
         </View>
 
-        {/* Day Pack */}
+        {/* Reminder Settings */}
         <View
           style={[
             styles.section,
@@ -141,20 +162,45 @@ export default function NotificationSettingsScreen() {
           ]}
         >
           <Typography variant="label" color={colors.textMuted} style={styles.sectionTitle}>
-            DAY PACK
+            DAILY REMINDER
           </Typography>
 
           <SettingRow
-            icon="calendar"
-            label="Day Pack"
-            description="Dynamic prompts through the day (3–5 max)"
-            value={preferences.dayPackEnabled}
-            onToggle={(v) => handleToggle('dayPackEnabled', v)}
+            icon="clock"
+            label="Daily Reminder"
+            description="Get a gentle nudge to journal every day"
+            value={preferences.dailyReminder}
+            onToggle={(v) => handleToggle('dailyReminder', v)}
             disabled={!preferences.enabled}
           />
+
+          <TouchableOpacity
+            style={[
+              styles.timeSelector,
+              { borderBottomColor: colors.surfaceHighlight },
+              (!preferences.enabled || !preferences.dailyReminder) && styles.disabled,
+            ]}
+            onPress={() => setShowTimePicker(true)}
+            disabled={!preferences.enabled || !preferences.dailyReminder}
+          >
+            <View style={styles.settingContent}>
+              <Typography variant="body" color={colors.textPrimary}>
+                Reminder Time
+              </Typography>
+              <Typography variant="caption" color={colors.textMuted}>
+                When should we remind you?
+              </Typography>
+            </View>
+            <View style={styles.timeValue}>
+              <Typography variant="body" color={colors.primary}>
+                {formatTime(preferences.reminderTime)}
+              </Typography>
+              <Icon name="chevron-right" size={20} color={colors.textMuted} />
+            </View>
+          </TouchableOpacity>
         </View>
 
-        {/* Intensity */}
+        {/* Alert Types */}
         <View
           style={[
             styles.section,
@@ -166,88 +212,44 @@ export default function NotificationSettingsScreen() {
           ]}
         >
           <Typography variant="label" color={colors.textMuted} style={styles.sectionTitle}>
-            INTENSITY
+            NOTIFICATION TYPES
           </Typography>
 
-          <TouchableOpacity
-            style={[
-              styles.choiceRow,
-              { borderBottomColor: colors.surfaceHighlight },
-              (!preferences.enabled || !preferences.dayPackEnabled) && styles.disabled,
-            ]}
-            onPress={() => handleIntensityChange('standard')}
-            disabled={!preferences.enabled || !preferences.dayPackEnabled}
-          >
-            <View style={styles.settingContent}>
-              <Typography variant="body" color={colors.textPrimary}>
-                Standard
-              </Typography>
-              <Typography variant="caption" color={colors.textMuted}>
-                Up to 3/day
-              </Typography>
-            </View>
-            {preferences.dayPackIntensity === 'standard' && (
-              <Icon name="check" size={20} color={colors.primary} />
-            )}
-          </TouchableOpacity>
+          <SettingRow
+            icon="zap"
+            label="Streak Alerts"
+            description="Know when your streak is at risk or hits a milestone"
+            value={preferences.streakAlerts}
+            onToggle={(v) => handleToggle('streakAlerts', v)}
+            disabled={!preferences.enabled}
+          />
 
-          <TouchableOpacity
-            style={[
-              styles.choiceRow,
-              { borderBottomColor: colors.surfaceHighlight },
-              (!preferences.enabled || !preferences.dayPackEnabled) && styles.disabled,
-            ]}
-            onPress={() => handleIntensityChange('supportive')}
-            disabled={!preferences.enabled || !preferences.dayPackEnabled}
-          >
-            <View style={styles.settingContent}>
-              <Typography variant="body" color={colors.textPrimary}>
-                Supportive
-              </Typography>
-              <Typography variant="caption" color={colors.textMuted}>
-                Up to 3 + 2/day if inactive
-              </Typography>
-            </View>
-            {preferences.dayPackIntensity === 'supportive' && (
-              <Icon name="check" size={20} color={colors.primary} />
-            )}
-          </TouchableOpacity>
-        </View>
+          <SettingRow
+            icon="eye"
+            label="Insights"
+            description="Get notified about patterns in your entries"
+            value={preferences.insightAlerts}
+            onToggle={(v) => handleToggle('insightAlerts', v)}
+            disabled={!preferences.enabled}
+          />
 
-        {/* Quiet Hours */}
-        <View
-          style={[
-            styles.section,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.surfaceHighlight,
-              borderRadius: borderRadius.l,
-            },
-          ]}
-        >
-          <Typography variant="label" color={colors.textMuted} style={styles.sectionTitle}>
-            QUIET HOURS
-          </Typography>
+          <SettingRow
+            icon="award"
+            label="Achievements"
+            description="Celebrate when you unlock new badges"
+            value={preferences.achievementAlerts}
+            onToggle={(v) => handleToggle('achievementAlerts', v)}
+            disabled={!preferences.enabled}
+          />
 
-          <TouchableOpacity
-            style={[
-              styles.choiceRow,
-              { borderBottomColor: colors.surfaceHighlight },
-              (!preferences.enabled || !preferences.dayPackEnabled) && styles.disabled,
-            ]}
-            onPress={() => setShowQuietHoursPicker(true)}
-            disabled={!preferences.enabled || !preferences.dayPackEnabled}
-          >
-            <View style={styles.settingContent}>
-              <Typography variant="body" color={colors.textPrimary}>
-                Quiet hours
-              </Typography>
-              <Typography variant="caption" color={colors.textMuted}>
-                {preferences.quietHoursStart} – {preferences.quietHoursEnd}
-              </Typography>
-            </View>
-            <Icon name="chevron-right" size={20} color={colors.textMuted} />
-          </TouchableOpacity>
+          <SettingRow
+            icon="bar-chart-2"
+            label="Weekly Summary"
+            description="Receive a weekly reflection of your journaling"
+            value={preferences.weeklySummary}
+            onToggle={(v) => handleToggle('weeklySummary', v)}
+            disabled={!preferences.enabled}
+          />
         </View>
 
         {/* Info */}
@@ -260,12 +262,12 @@ export default function NotificationSettingsScreen() {
         </View>
       </ScrollView>
 
-      {/* Quiet Hours Picker (simple presets for now) */}
-      {showQuietHoursPicker && (
+      {/* Time Picker Modal */}
+      {showTimePicker && (
         <View style={styles.modalOverlay}>
           <TouchableOpacity
             style={styles.modalBackdrop}
-            onPress={() => setShowQuietHoursPicker(false)}
+            onPress={() => setShowTimePicker(false)}
             activeOpacity={1}
           />
           <View
@@ -279,43 +281,38 @@ export default function NotificationSettingsScreen() {
             ]}
           >
             <Typography variant="subheading" color={colors.textPrimary} style={styles.modalTitle}>
-              Select Quiet Hours
+              Select Reminder Time
             </Typography>
-            {[
-              { label: '10 PM – 8 AM', start: '22:00', end: '08:00' },
-              { label: '11 PM – 8 AM', start: '23:00', end: '08:00' },
-              { label: '9 PM – 7 AM', start: '21:00', end: '07:00' },
-              { label: 'Off (no quiet hours)', start: '00:00', end: '00:00' },
-            ].map((option) => (
+            {TIME_OPTIONS.map((option) => (
               <TouchableOpacity
-                key={option.label}
+                key={option.value}
                 style={[
                   styles.timeOption,
                   { borderBottomColor: colors.surfaceHighlight },
-                  preferences.quietHoursStart === option.start && preferences.quietHoursEnd === option.end && {
+                  preferences.reminderTime === option.value && {
                     backgroundColor: `${colors.primary}15`,
                   },
                 ]}
-                onPress={() => handleQuietHoursChange(option.start, option.end)}
+                onPress={() => handleTimeChange(option.value)}
               >
                 <Typography
                   variant="body"
                   color={
-                    preferences.quietHoursStart === option.start && preferences.quietHoursEnd === option.end
+                    preferences.reminderTime === option.value
                       ? colors.primary
                       : colors.textPrimary
                   }
                 >
                   {option.label}
                 </Typography>
-                {preferences.quietHoursStart === option.start && preferences.quietHoursEnd === option.end && (
+                {preferences.reminderTime === option.value && (
                   <Icon name="check" size={20} color={colors.primary} />
                 )}
               </TouchableOpacity>
             ))}
             <TouchableOpacity
               style={[styles.cancelButton, { borderTopColor: colors.surfaceHighlight }]}
-              onPress={() => setShowQuietHoursPicker(false)}
+              onPress={() => setShowTimePicker(false)}
             >
               <Typography variant="body" color={colors.textMuted}>
                 Cancel
@@ -373,12 +370,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     paddingLeft: 68,
-    borderBottomWidth: 1,
-  },
-  choiceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
     borderBottomWidth: 1,
   },
   timeValue: {
