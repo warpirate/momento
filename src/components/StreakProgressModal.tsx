@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Modal, TouchableOpacity, Animated, Easing } from 'react-native';
+import { View, StyleSheet, Modal, TouchableOpacity, Animated, ScrollView, Pressable } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { Typography } from './ui/Typography';
 import { useTheme } from '../theme/theme';
@@ -60,6 +60,9 @@ export const StreakProgressModal: React.FC<StreakProgressModalProps> = ({
 
   const currentWeekBadge = getNextWeeklyBadge(currentStreak);
   const daysInCurrentWeek = currentStreak % 7;
+  const badgeTargetMatch = currentWeekBadge.description.match(/(\d+)/);
+  const badgeTargetDays = badgeTargetMatch ? parseInt(badgeTargetMatch[1], 10) : 7;
+  const badgeProgressDays = Math.min(currentStreak, badgeTargetDays);
   
   // If daysInCurrentWeek is 0, it means we just completed a 7-day cycle (e.g., day 7, 14, 21)
   // In this case, we want to show the completed state (7/7) instead of 0/7
@@ -103,6 +106,8 @@ export const StreakProgressModal: React.FC<StreakProgressModalProps> = ({
               elevation: 4,
             },
           ]}
+          accessibilityRole="text"
+          accessibilityLabel={`Day ${dayIndex}${isCompleted ? ' completed' : isToday ? ' today' : ''}`}
         >
           {isCompleted ? (
             <Icon name="check" size={16} color="#FFF" />
@@ -115,9 +120,6 @@ export const StreakProgressModal: React.FC<StreakProgressModalProps> = ({
             </Typography>
           )}
         </View>
-        <Typography variant="caption" style={{ marginTop: 6, color: isToday ? colors.primary : colors.textMuted, fontWeight: isToday ? 'bold' : 'normal' }}>
-          Day {dayIndex}
-        </Typography>
       </View>
     );
   };
@@ -129,91 +131,138 @@ export const StreakProgressModal: React.FC<StreakProgressModalProps> = ({
       animationType="none"
       onRequestClose={onClose}
     >
-      <TouchableOpacity
-        style={styles.overlay}
-        activeOpacity={1}
-        onPress={onClose}
-      >
-        <Animated.View
-          style={[
-            styles.modalContent,
-            {
-              backgroundColor: colors.surface,
-              borderRadius: borderRadius.xl,
-              opacity: fadeAnim,
-              transform: [
-                { translateY: slideAnim },
-                { scale: scaleAnim }
-              ]
-            }
-          ]}
-        >
-          <View style={styles.header}>
-            <View style={styles.headerTitleContainer}>
-              <Icon name="trending-up" size={20} color={colors.primary} style={{ marginRight: 8 }} />
-              <Typography variant="subheading">Current Streak</Typography>
-            </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Icon name="x" size={24} color={colors.textPrimary} />
-            </TouchableOpacity>
-          </View>
-          
-          <View style={styles.streakHero}>
-            <View style={styles.fireContainer}>
-              <AnimatedFire size={100} intensity={getFireIntensity(currentStreak)} />
-            </View>
-            <View style={styles.streakCountContainer}>
-              <Typography variant="heading" style={{ fontSize: 56, lineHeight: 64, color: colors.textPrimary }}>
-                {currentStreak}
-              </Typography>
-              <Typography variant="subheading" color={colors.textSecondary} style={{ marginTop: -4 }}>
-                days
-              </Typography>
-            </View>
-          </View>
-          
-          <View style={[styles.badgeCard, { backgroundColor: colors.background, borderRadius: borderRadius.l }]}>
-            <View style={styles.badgeHeader}>
-              <View style={[styles.iconContainer, { backgroundColor: colors.primary + '15' }]}>
-                <Icon name={targetBadge.icon} size={24} color={colors.primary} />
+      <Pressable style={styles.overlay} onPress={onClose}>
+        <Pressable style={styles.centering} onPress={(event) => event.stopPropagation()}>
+          <Animated.View
+            style={[
+              styles.modalContent,
+              {
+                backgroundColor: colors.surface,
+                borderRadius: borderRadius.xl,
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
+              },
+            ]}
+          >
+            <View style={styles.header}>
+              <View style={styles.headerTitleContainer}>
+                <View style={[styles.headerIcon, { backgroundColor: colors.primary + '14' }]}>
+                  <Icon name="trending-up" size={16} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Typography variant="subheading">Streak</Typography>
+                  <Typography variant="caption" color={colors.textSecondary}>
+                    Keep showing up.
+                  </Typography>
+                </View>
               </View>
-              <View style={{ flex: 1, marginLeft: 16 }}>
-                <Typography variant="subheading" style={{ marginBottom: 2 }}>{targetBadge.name}</Typography>
-                <Typography variant="caption" color={colors.textSecondary}>{targetBadge.description}</Typography>
+
+              <TouchableOpacity
+                onPress={onClose}
+                style={[styles.closeButton, { backgroundColor: colors.surfaceHighlight }]}
+                accessibilityRole="button"
+                accessibilityLabel="Close streak dialog"
+              >
+                <Icon name="x" size={18} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
+              <View style={styles.streakHero}>
+                <View style={[styles.heroRing, { backgroundColor: colors.primary + '10' }]}>
+                  <AnimatedFire size={72} intensity={getFireIntensity(currentStreak)} />
+                </View>
+
+                <View style={styles.streakCountContainer}>
+                  <Typography
+                    variant="heading"
+                    style={{ fontSize: 52, lineHeight: 56, color: colors.textPrimary, letterSpacing: -1 }}
+                  >
+                    {currentStreak}
+                  </Typography>
+                  <Typography variant="subheading" color={colors.textSecondary}>
+                    day streak
+                  </Typography>
+                </View>
               </View>
-              <View style={styles.progressTextContainer}>
-                <Typography variant="label" color={colors.primary} style={{ fontWeight: 'bold' }}>
-                  {progress} / 7
+
+              <View style={[styles.sectionDivider, { backgroundColor: colors.surfaceHighlight }]} />
+
+              <View
+                style={[
+                  styles.badgeCard,
+                  {
+                    backgroundColor: colors.background,
+                    borderRadius: borderRadius.l,
+                    borderColor: colors.surfaceHighlight,
+                  },
+                ]}
+              >
+                <View style={styles.badgeHeader}>
+                  <View style={[styles.iconContainer, { backgroundColor: colors.primary + '15' }]}>
+                    <Icon name={targetBadge.icon} size={22} color={colors.primary} />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: spacing.m }}>
+                    <Typography variant="subheading" style={{ marginBottom: 2 }}>
+                      {targetBadge.name}
+                    </Typography>
+                    <Typography variant="caption" color={colors.textSecondary}>
+                      {targetBadge.description}
+                    </Typography>
+                  </View>
+                  <View style={[styles.progressPill, { backgroundColor: colors.primary + '12' }]}>
+                    <Typography variant="label" color={colors.primary} style={{ fontWeight: 'bold' }}>
+                      {badgeProgressDays}/{badgeTargetDays}
+                    </Typography>
+                  </View>
+                </View>
+
+                <View style={styles.progressContainer}>
+                  <View style={[styles.progressBar, { backgroundColor: colors.surfaceHighlight }]}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        {
+                          width: `${(badgeProgressDays / badgeTargetDays) * 100}%`,
+                          backgroundColor: colors.primary,
+                        },
+                      ]}
+                    />
+                  </View>
+                </View>
+
+                <Typography variant="caption" color={colors.textMuted} style={{ marginBottom: spacing.s }}>
+                  This week: {progress}/7
+                </Typography>
+
+                <View style={styles.daysRow}>
+                  {[1, 2, 3, 4, 5, 6, 7].map(renderDayCircle)}
+                </View>
+
+                <Typography variant="caption" color={colors.textMuted} style={{ marginTop: spacing.s }}>
+                  {isCycleComplete
+                    ? 'Milestone reached. Keep going for the next badge.'
+                    : `Complete ${7 - progress} more day${7 - progress === 1 ? '' : 's'} this week.`}
                 </Typography>
               </View>
-            </View>
-            
-            <View style={styles.progressContainer}>
-              <View style={[styles.progressBar, { backgroundColor: colors.surfaceHighlight }]}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    {
-                      width: `${(progress / 7) * 100}%`,
-                      backgroundColor: colors.primary
-                    }
-                  ]}
-                />
+
+              <View style={styles.footer}>
+                <Typography
+                  variant="body"
+                  style={{ textAlign: 'center', fontStyle: 'italic' }}
+                  color={colors.textMuted}
+                >
+                  "Consistency is the key to mastery."
+                </Typography>
               </View>
-            </View>
-            
-            <View style={styles.daysRow}>
-              {[1, 2, 3, 4, 5, 6, 7].map(renderDayCircle)}
-            </View>
-          </View>
-          
-          <View style={styles.footer}>
-            <Typography variant="body" style={{ textAlign: 'center', fontStyle: 'italic' }} color={colors.textMuted}>
-              "Consistency is the key to mastery."
-            </Typography>
-          </View>
-        </Animated.View>
-      </TouchableOpacity>
+            </ScrollView>
+          </Animated.View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 };
@@ -225,11 +274,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 20,
   },
+  centering: {
+    width: '100%',
+    alignSelf: 'center',
+  },
   modalContent: {
-    padding: 24,
+    paddingTop: 16,
+    paddingBottom: 16,
     width: '100%',
     maxWidth: 400,
     alignSelf: 'center',
+    maxHeight: '85%',
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
@@ -243,31 +298,61 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 32,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
   },
   headerTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    gap: 10,
+  },
+  headerIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   closeButton: {
-    padding: 4,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
   streakHero: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginTop: 8,
+    marginBottom: 18,
     flexDirection: 'row',
     justifyContent: 'center',
   },
-  fireContainer: {
-    marginRight: 24,
+  heroRing: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
   },
   streakCountContainer: {
     alignItems: 'flex-start',
     justifyContent: 'center',
   },
+  sectionDivider: {
+    height: 1,
+    width: '100%',
+    marginBottom: 16,
+  },
   badgeCard: {
-    padding: 20,
-    marginBottom: 24,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
   },
   badgeHeader: {
     flexDirection: 'row',
@@ -281,12 +366,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  progressTextContainer: {
-    marginLeft: 12,
+  progressPill: {
+    minWidth: 56,
+    height: 28,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    alignItems: 'center',
     justifyContent: 'center',
   },
   progressContainer: {
-    marginBottom: 24,
+    marginBottom: 16,
   },
   progressBar: {
     height: 8,
@@ -303,19 +392,18 @@ const styles = StyleSheet.create({
   },
   dayContainer: {
     alignItems: 'center',
-    width: 32,
+    width: 34,
   },
   dayCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
     borderWidth: 1,
   },
   footer: {
-    marginTop: 8,
+    marginTop: 16,
     alignItems: 'center',
   },
 });

@@ -1,25 +1,14 @@
 // @ts-nocheck
 // This file is a Supabase Edge Function and runs in a Deno environment
+// Repurposed: AI Enhance - rewrites journal entries before saving (no DB writes)
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 interface RequestBody {
-  record: {
-    id: string;
-    content: string;
-  };
+  content: string;
+  stream?: boolean;
 }
 
-interface AnalysisResult {
-  mood: string;
-  activities: string[];
-  people: string[];
-  sentiment_score: number;
-  tags: string[];
-}
-
-// Nebius returns OpenAI-compatible responses. We only care about the first choice.
 interface NebiusChatCompletion {
   choices?: Array<{
     message?: {
@@ -35,30 +24,51 @@ const corsHeaders = {
 };
 
 serve(async (req: Request) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  try {
-    const { record } = (await req.json()) as RequestBody;
-    const entryId = record?.id;
-    const content = record?.content ?? '';
+  let parsedBody: RequestBody | null = null;
 
-    if (!content.trim() || !entryId) {
-      throw new Error('Missing content or entry ID');
+  try {
+    try {
+      parsedBody = (await req.json()) as RequestBody;
+    } catch (e) {
+      console.error('Invalid JSON body:', e);
+      throw new Error('Invalid JSON body');
     }
 
-    // 1. Call Nebius (OpenAI-compatible) chat completions API
+    const { content, stream = false } = parsedBody;
+
+    if (!content?.trim()) {
+      throw new Error('Missing content');
+    }
+
+    if (content.trim().length < 10) {
+      throw new Error('Content too short to enhance');
+    }
+
     const nebiusApiKey = Deno.env.get('NEBIUS_API_KEY');
     if (!nebiusApiKey) {
       throw new Error('Missing NEBIUS_API_KEY environment variable');
     }
 
-    const systemPrompt =
-      'You are an analysis engine for a journaling app. You MUST return ONLY valid JSON, no markdown, no prose.';
+    const systemPrompt = `You are a writing assistant for a personal journaling app.
+Your task: lightly improve the user's journal entry with minimal changes.
 
-    const userPrompt = `Analyze the following journal entry and extract structured data.\nReturn ONLY a valid JSON object with no markdown formatting.\n\nEntry: "${content}"\n\nJSON Structure:\n{\n  "mood": "string (e.g., Happy, Anxious, Tired, Excited)",\n  "activities": ["string", "string"],\n  "people": ["string", "string"],\n  "sentiment_score": number (-1.0 to 1.0),\n  "tags": ["string", "string"]\n}`;
+Hard rules:
+- Preserve the user's meaning, tone, and voice.
+- Keep the same paragraph structure (same number of paragraphs). Do not merge paragraphs.
+- Keep the same tense and point of view.
+- Do NOT add new facts, events, names, dates, locations, or numbers.
+- Only make small edits: grammar, punctuation, readability.
+- If the user expresses emotions, make them slightly clearer in the text WITHOUT changing what they felt.
+- Return ONLY the improved text. No markdown. No explanations.
+`;
+
+    const userPrompt = content;
+
+    const wantStream = stream === true;
 
     const nebiusResponse = await fetch('https://api.tokenfactory.nebius.com/v1/chat/completions', {
       method: 'POST',
@@ -72,104 +82,105 @@ serve(async (req: Request) => {
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
+        max_tokens: 2000,
+        temperature: 0.3,
+        stream: wantStream,
       }),
     });
 
-    const nebiusData = (await nebiusResponse.json()) as NebiusChatCompletion;
-
     if (!nebiusResponse.ok) {
-      console.error('Nebius error response:', JSON.stringify(nebiusData));
-      throw new Error(nebiusData.error?.message || `Nebius request failed with status ${nebiusResponse.status}`);
+      const rawText = await nebiusResponse.text();
+      console.error('Nebius error status:', nebiusResponse.status);
+      console.error('Nebius error response:', rawText);
+      throw new Error(`Nebius request failed with status ${nebiusResponse.status}`);
     }
 
-    const textResponse = nebiusData.choices?.[0]?.message?.content;
-    if (!textResponse) {
-      console.error('Nebius missing content:', JSON.stringify(nebiusData));
-      throw new Error('Failed to get valid response from Nebius');
-    }
-
-    // Clean up potential markdown code blocks if the model adds them
-    const jsonString = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-    const analysis = JSON.parse(jsonString) as AnalysisResult;
-
-    // 1.5 Generate Embedding
-    let embedding = null;
-    try {
-      const embeddingResp = await fetch('https://api.tokenfactory.nebius.com/v1/embeddings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${nebiusApiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'BAAI/bge-m3', // Nebius likely hosts open weights. bge-m3 is common. Or maybe just 'text-embedding-3-small' if they proxy. Let's try a safe bet or handle error. 
-          // Actually, without knowing Nebius model list, I'll try 'sentence-transformers/all-MiniLM-L6-v2' or just fail gracefully.
-          // Let's use a standard generic name often mapped: 'text-embedding-ada-002' or similar. 
-          // I'll blindly trust 'text-embedding-3-small' for now as it matches the vector size 1536 I chose.
-          model: 'text-embedding-3-small',
-          input: content,
-        }),
-      });
-      
-      if (embeddingResp.ok) {
-        const embeddingData = await embeddingResp.json();
-        embedding = embeddingData.data?.[0]?.embedding;
-      } else {
-        console.warn('Embedding failed:', await embeddingResp.text());
+    if (!wantStream) {
+      const nebiusData = (await nebiusResponse.json()) as NebiusChatCompletion;
+      const enhanced = nebiusData.choices?.[0]?.message?.content?.trim();
+      if (!enhanced) {
+        console.error('Nebius missing content:', JSON.stringify(nebiusData));
+        throw new Error('Failed to get valid response from Nebius');
       }
-    } catch (e) {
-      console.warn('Embedding extraction error:', e);
+
+      return new Response(JSON.stringify({ success: true, enhanced }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    // 2. Save to Supabase
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Missing Supabase configuration');
+    if (!nebiusResponse.body) {
+      throw new Error('Nebius response body missing');
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
 
-    const { error } = await supabase.from('entry_signals').insert({
-      entry_id: entryId,
-      mood: analysis.mood,
-      activities: analysis.activities,
-      people: analysis.people,
-      sentiment_score: analysis.sentiment_score,
-      tags: analysis.tags,
+    const readable = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const reader = nebiusResponse.body.getReader();
+        let buffer = '';
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() ?? '';
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed.startsWith('data:')) continue;
+
+              const data = trimmed.slice('data:'.length).trim();
+              if (!data) continue;
+              if (data === '[DONE]') {
+                controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                controller.close();
+                return;
+              }
+
+              try {
+                const parsed = JSON.parse(data) as any;
+                const chunk = parsed?.choices?.[0]?.delta?.content ?? '';
+                if (chunk) {
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ chunk })}\n\n`));
+                }
+              } catch {
+                // ignore partial/invalid lines
+              }
+            }
+          }
+
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          controller.close();
+        } catch (err) {
+          console.error('Streaming transform error:', err);
+          controller.error(err);
+        }
+      },
     });
 
-    if (error) {
-      console.error('Supabase error:', error);
-      throw new Error(`Failed to save analysis: ${error.message}`);
-    }
-
-    // 3. Update Entry with Embedding
-    if (embedding) {
-      await supabase
-        .from('entries')
-        .update({ embedding })
-        .eq('id', entryId);
-    }
-
-    return new Response(
-      JSON.stringify({ success: true, analysis }), 
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      }
-    );
-
+    return new Response(readable, {
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      },
+    });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    console.error('Error in analyze-entry function:', error);
-    
+    console.error('Error in enhance-entry function:', error);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: errorMessage 
-      }), 
+      JSON.stringify({
+        success: false,
+        error: errorMessage,
+        request: parsedBody,
+      }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
