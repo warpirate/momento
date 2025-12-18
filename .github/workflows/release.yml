@@ -36,11 +36,6 @@ jobs:
       - name: Set VERSION env
         run: echo 'VERSION=$(node -p "require(\"./package.json\").version")' >> $GITHUB_ENV
 
-      - name: Create/Update git tag
-        run: |
-          git tag -a "v${{ env.VERSION }}" -m "Release v${{ env.VERSION }}" -f
-          git push origin "v${{ env.VERSION }}" --force
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
