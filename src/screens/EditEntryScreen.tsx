@@ -12,7 +12,6 @@ import { Typography } from '../components/ui/Typography';
 import { Button } from '../components/ui/Button';
 import { EntryComposer } from '../components/EntryComposer';
 import { useTheme } from '../theme/theme';
-import { supabase } from '../lib/supabaseClient';
 import { useSyncContext } from '../lib/SyncContext';
 import { useAlert } from '../context/AlertContext';
 
@@ -49,11 +48,7 @@ function EditEntryScreen({ entry }: { entry: Entry }) {
       // Mark that we have local changes that need to be synced and analyzed.
       markHasUnsyncedEntries();
 
-      sync().then(() => {
-        supabase.functions.invoke('analyze-entry', {
-          body: { record: { id: entry.id, content: entry.content } },
-        }).then(() => sync());
-      });
+      sync().catch(err => console.error('Sync after edit failed:', err));
 
       navigation.goBack();
     } catch (error) {

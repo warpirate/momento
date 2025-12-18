@@ -55,12 +55,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [unreadCount, setUnreadCount] = useState(0);
   const [preferences, setPreferences] = useState<NotificationPreferences>({
     enabled: true,
-    dailyReminder: true,
-    reminderTime: '21:00',
-    streakAlerts: true,
-    insightAlerts: true,
-    achievementAlerts: true,
-    weeklySummary: true,
+    dayPackEnabled: true,
+    dayPackIntensity: 'supportive',
+    quietHoursStart: '22:00',
+    quietHoursEnd: '08:00',
   });
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -72,12 +70,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       try {
         await notificationService.initialize();
         await loadData();
-        
-        // Schedule daily reminder based on user preferences
-        const prefs = await notificationService.getPreferences();
-        if (prefs.enabled && prefs.dailyReminder) {
-          await notificationService.scheduleDailyReminder(prefs.reminderTime);
-        }
       } catch (error) {
         console.error('Failed to initialize notifications:', error);
       } finally {
@@ -160,18 +152,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     data?: Record<string, any>,
     sendPush: boolean = false
   ) => {
-    // Check if this type of notification is enabled
-    const shouldSend = (
-      preferences.enabled && (
-        (type === 'daily_reminder' && preferences.dailyReminder) ||
-        (type.includes('streak') && preferences.streakAlerts) ||
-        (type === 'insight' && preferences.insightAlerts) ||
-        (type === 'achievement' && preferences.achievementAlerts) ||
-        (type === 'weekly_summary' && preferences.weeklySummary)
-      )
-    );
-
-    if (!shouldSend) return;
+    if (!preferences.enabled) return;
 
     // Save in-app notification
     const notification = await notificationService.saveNotification({

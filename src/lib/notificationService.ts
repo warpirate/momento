@@ -1,6 +1,6 @@
 import PushNotification, { Importance } from 'react-native-push-notification';
 import PushNotificationIOS from '@react-native-community/push-notification-ios';
-import { Platform } from 'react-native';
+import { PermissionsAndroid, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Notification channel IDs
@@ -34,22 +34,18 @@ export interface AppNotification {
 // User notification preferences
 export interface NotificationPreferences {
   enabled: boolean;
-  dailyReminder: boolean;
-  reminderTime: string; // HH:mm format
-  streakAlerts: boolean;
-  insightAlerts: boolean;
-  achievementAlerts: boolean;
-  weeklySummary: boolean;
+  dayPackEnabled: boolean;
+  dayPackIntensity: 'standard' | 'supportive';
+  quietHoursStart: string; // HH:mm format
+  quietHoursEnd: string; // HH:mm format
 }
 
 const DEFAULT_PREFERENCES: NotificationPreferences = {
   enabled: true,
-  dailyReminder: true,
-  reminderTime: '21:00',
-  streakAlerts: true,
-  insightAlerts: true,
-  achievementAlerts: true,
-  weeklySummary: true,
+  dayPackEnabled: true,
+  dayPackIntensity: 'supportive',
+  quietHoursStart: '22:00',
+  quietHoursEnd: '08:00',
 };
 
 const PREFERENCES_KEY = 'momento:notification_preferences';
@@ -151,7 +147,7 @@ class NotificationService {
   // Schedule daily reminder
   async scheduleDailyReminder(time: string) {
     const prefs = await this.getPreferences();
-    if (!prefs.enabled || !prefs.dailyReminder) return;
+    if (!prefs.enabled || !prefs.dayPackEnabled) return;
 
     // Cancel existing daily reminder
     // New API uses singular method name; keep id string stable for lookup
@@ -187,6 +183,61 @@ class NotificationService {
       importance: 'high',
       priority: 'high',
       userInfo: { type: 'daily_reminder' },
+    });
+  }
+
+  async requestPermissions(): Promise<boolean> {
+    if (Platform.OS === 'ios') {
+      const result = await PushNotificationIOS.requestPermissions({
+        alert: true,
+        badge: true,
+        sound: true,
+      });
+      return (result.alert || result.badge || result.sound) ?? false;
+    }
+
+    if (Platform.OS === 'android') {
+      if (Platform.Version < 33) return true;
+
+      const result = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+      );
+      return result === PermissionsAndroid.RESULTS.GRANTED;
+    }
+
+    return true;
+  }
+
+  async cancelScheduledByIds(ids: string[]) {
+    for (const id of ids) {
+      try {
+        PushNotification.cancelLocalNotification(id);
+      } catch (error) {
+        console.warn('Failed to cancel local notification:', id, error);
+      }
+    }
+  }
+
+  async scheduleLocalNotification(
+    params: {
+      id: string;
+      channelId: string;
+      title: string;
+      message: string;
+      date: Date;
+      userInfo?: Record<string, any>;
+    }
+  ) {
+    PushNotification.localNotificationSchedule({
+      id: params.id,
+      channelId: params.channelId,
+      title: params.title,
+      message: params.message,
+      date: params.date,
+      allowWhileIdle: true,
+      importance: 'high',
+      priority: 'high',
+      userInfo: params.userInfo,
     });
   }
 
@@ -238,13 +289,6 @@ class NotificationService {
   async savePreferences(prefs: NotificationPreferences) {
     try {
       await AsyncStorage.setItem(PREFERENCES_KEY, JSON.stringify(prefs));
-      
-      // Reschedule daily reminder if time changed
-      if (prefs.enabled && prefs.dailyReminder) {
-        await this.scheduleDailyReminder(prefs.reminderTime);
-      } else {
-        PushNotification.cancelLocalNotification('daily_reminder');
-      }
     } catch (error) {
       console.error('Error saving notification preferences:', error);
     }
@@ -323,18 +367,6 @@ class NotificationService {
     return notifications.filter(n => !n.read).length;
   }
 
-  // Request permissions (iOS)
-  async requestPermissions(): Promise<boolean> {
-    if (Platform.OS === 'ios') {
-      const result = await PushNotificationIOS.requestPermissions({
-        alert: true,
-        badge: true,
-        sound: true,
-      });
-      return (result.alert || result.badge || result.sound) ?? false;
-    }
-    return true;
-  }
 }
 
 export const notificationService = new NotificationService();
