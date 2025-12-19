@@ -1,6 +1,6 @@
 {
   "name": "momento",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "private": true,
   "scripts": {
     "prestart": "node scripts/generate-release-notes.js",
