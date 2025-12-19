@@ -38,7 +38,9 @@ export default function DailyEntriesScreen() {
       const allEntries = await database.get<Entry>('entries').query().fetch();
       const filteredEntries = allEntries
         .filter(entry => {
-          const entryDate = new Date(entry.createdAt);
+          const entryDate = entry.createdAt;
+          // Show entries even if date is invalid - don't filter them out completely
+          if (!entryDate || isNaN(entryDate.getTime())) return false;
           const targetDate = new Date(date);
           return (
             entryDate.getDate() === targetDate.getDate() &&
@@ -47,9 +49,11 @@ export default function DailyEntriesScreen() {
           );
         })
         .sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() -
-            new Date(a.createdAt).getTime(),
+          (a, b) => {
+            const aTime = a.createdAt && !isNaN(a.createdAt.getTime()) ? a.createdAt.getTime() : 0;
+            const bTime = b.createdAt && !isNaN(b.createdAt.getTime()) ? b.createdAt.getTime() : 0;
+            return bTime - aTime;
+          },
         );
       setEntries(filteredEntries);
     };
@@ -64,7 +68,9 @@ export default function DailyEntriesScreen() {
         onPress={() => navigation.navigate('EntryDetail', { entryId: item.id })}
       >
         <Typography style={styles.entryTime} color={colors.primary}>
-          {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {item.createdAt && !isNaN(item.createdAt.getTime()) && item.createdAt.getTime() !== 0
+            ? item.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : 'Invalid date'}
         </Typography>
         <View style={styles.entryContent}>
           <Typography style={styles.entryPreview} numberOfLines={3}>

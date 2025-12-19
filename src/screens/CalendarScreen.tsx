@@ -55,7 +55,9 @@ export default function CalendarScreen() {
 
   const hasEntryOnDate = (date: Date) => {
     return entries.some(entry => {
-      const entryDate = new Date(entry.createdAt);
+      const entryDate = entry.createdAt;
+      // Show entries even if date is invalid - don't filter them out
+      if (!entryDate || isNaN(entryDate.getTime())) return false;
       return (
         entryDate.getDate() === date.getDate() &&
         entryDate.getMonth() === date.getMonth() &&
@@ -67,7 +69,9 @@ export default function CalendarScreen() {
   const getEntriesForDate = (date: Date) => {
     return entries
       .filter(entry => {
-        const entryDate = new Date(entry.createdAt);
+        const entryDate = entry.createdAt;
+        // Show entries even if date is invalid - don't filter them out
+        if (!entryDate || isNaN(entryDate.getTime())) return false;
         return (
           entryDate.getDate() === date.getDate() &&
           entryDate.getMonth() === date.getMonth() &&
@@ -75,9 +79,11 @@ export default function CalendarScreen() {
         );
       })
       .sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() -
-          new Date(a.createdAt).getTime(),
+        (a, b) => {
+          const aTime = a.createdAt && !isNaN(a.createdAt.getTime()) ? a.createdAt.getTime() : 0;
+          const bTime = b.createdAt && !isNaN(b.createdAt.getTime()) ? b.createdAt.getTime() : 0;
+          return bTime - aTime;
+        },
       );
   };
 
@@ -189,7 +195,11 @@ export default function CalendarScreen() {
                   onPress={() => navigation.navigate('EntryDetail', { entryId: item.id })}
                 >
                   <Typography style={styles.entryTime} color={colors.primary}>
-                    {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {item.createdAt && !isNaN(item.createdAt.getTime()) && item.createdAt.getTime() > 0
+                      ? item.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      : item.updatedAt && !isNaN(item.updatedAt.getTime()) && item.updatedAt.getTime() > 0
+                      ? item.updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      : '--:--'}
                   </Typography>
                   <View style={styles.entryContent}>
                     <Typography style={styles.entryPreview} numberOfLines={1}>

@@ -11,5 +11,11 @@
       "Updated version to 0.0.6 and adjusted related dependencies in package.json and package-lock.json.",
       "Minor adjustments to audio playback time calculations in EntryComposer and EntryDetailScreen."
     ]
+  },
+  "0.0.7": {
+    "version": "0.0.7",
+    "title": "Merge pull request #6 from warpirate/test",
+    "description": "",
+    "changes": []
   }
 }

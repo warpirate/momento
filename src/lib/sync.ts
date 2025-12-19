@@ -28,8 +28,25 @@ export async function sync() {
           console.log('User ID:', session.user.id);
         }
         
-        // Force a fresh pull by using a slightly older timestamp to avoid cache issues
-        const freshLastPulledAt = lastPulledAt ? lastPulledAt - 1000 : 0;
+        // Check if we have entries with invalid timestamps that need fixing
+        // If so, force a full pull by using timestamp 0
+        let needsFullSync = false;
+        try {
+          const allEntries = await database.get('entries').query().fetch();
+          const invalidEntries = allEntries.filter((entry: any) => {
+            const createdAt = entry.createdAt;
+            return !createdAt || isNaN(createdAt.getTime()) || createdAt.getTime() === 0 || createdAt.getFullYear() < 2000;
+          });
+          if (invalidEntries.length > 0) {
+            console.log(`Found ${invalidEntries.length} entries with invalid timestamps, forcing full sync`);
+            needsFullSync = true;
+          }
+        } catch (err) {
+          console.warn('Error checking for invalid timestamps:', err);
+        }
+        
+        // Force a fresh pull - use 0 to get all entries if we have invalid timestamps
+        const freshLastPulledAt = needsFullSync ? 0 : (lastPulledAt ? lastPulledAt - 1000 : 0);
         console.log('Using fresh timestamp:', freshLastPulledAt);
         
         const { data, error } = await supabase.rpc('pull_changes', {
@@ -44,6 +61,11 @@ export async function sync() {
 
         const { changes, timestamp } = data;
         console.log('Pulled changes:', changes);
+
+        // Log timestamps for debugging - database should have correct timestamps
+        if (changes.entries?.created?.length > 0) {
+          console.log('Sample entry timestamps from server:', changes.entries.created[0]?.created_at, changes.entries.created[0]?.updated_at);
+        }
 
         // Fix for "Server wants client to create record... but it already exists locally"
         // 1) entries table
@@ -66,7 +88,9 @@ export async function sync() {
 
               for (const entry of changes.entries.created) {
                 if (existingIds.has(entry.id)) {
+                  // Move to updated - this will fix the timestamp from server
                   newUpdated.push(entry);
+                  console.log(`Moving entry ${entry.id} to updated to fix timestamp:`, entry.created_at);
                 } else {
                   newCreated.push(entry);
                 }

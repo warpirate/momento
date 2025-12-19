@@ -164,11 +164,16 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
       }
 
       const newEntry = await database.write(async () => {
+        const now = Date.now();
         return await database.get<Entry>('entries').create(record => {
           record.content = trimmed;
           record.userId = userId;
           if (finalImages.length > 0) record.images = JSON.stringify(finalImages);
           if (finalVoiceNote) record.voiceNote = finalVoiceNote;
+          // Explicitly set timestamps to ensure they're valid
+          // WatermelonDB's @date decorator should handle this, but we ensure it here
+          record.createdAt = new Date(now);
+          record.updatedAt = new Date(now);
         });
       });
 
@@ -283,7 +288,12 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
   const sortedEntries = useMemo(
     () =>
       [...entries].sort(
-        (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+        (a, b) => {
+          // Handle invalid dates by putting them at the end
+          const aTime = a.createdAt && !isNaN(a.createdAt.getTime()) ? a.createdAt.getTime() : 0;
+          const bTime = b.createdAt && !isNaN(b.createdAt.getTime()) ? b.createdAt.getTime() : 0;
+          return bTime - aTime;
+        },
       ),
     [entries],
   );
@@ -303,6 +313,8 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
     const today = new Date();
     return sortedEntries.find(entry => {
       const date = entry.createdAt;
+      // Validate date first
+      if (!date || isNaN(date.getTime()) || date.getTime() === 0) return false;
       return (
         date.getDate() === today.getDate() &&
         date.getMonth() === today.getMonth() &&
@@ -316,6 +328,9 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
     const today = new Date();
     const pastEntries = sortedEntries.filter(entry => {
       const date = entry.createdAt;
+      // Validate date first
+      if (!date || isNaN(date.getTime()) || date.getTime() === 0) return false;
+      // Check if not today
       return !(
         date.getDate() === today.getDate() &&
         date.getMonth() === today.getMonth() &&
@@ -327,7 +342,19 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
     
     // Get a random entry
     const randomEntry = pastEntries[Math.floor(Math.random() * pastEntries.length)];
-    const daysAgo = Math.floor((today.getTime() - randomEntry.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+    const entryDate = randomEntry.createdAt;
+    
+    // Validate the date before calculating
+    if (!entryDate || isNaN(entryDate.getTime()) || entryDate.getTime() === 0) {
+      return null;
+    }
+    
+    const daysAgo = Math.floor((today.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // Sanity check: if daysAgo is unreasonably large, something is wrong
+    if (daysAgo < 0 || daysAgo > 36500) { // More than 100 years is clearly wrong
+      return null;
+    }
     
     return {
       content: randomEntry.content.slice(0, 150) + (randomEntry.content.length > 150 ? '...' : ''),
@@ -425,15 +452,25 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
           />
         ))}
 
-        {onThisDayEntry && (
-          <OnThisDayCard
-            entry={onThisDayEntry}
-            yearsAgo={
-              new Date().getFullYear() - onThisDayEntry.createdAt.getFullYear()
-            }
-            onPress={() => navigation.navigate('EntryDetail', { entryId: onThisDayEntry.id })}
-          />
-        )}
+        {onThisDayEntry && (() => {
+          const entryDate = onThisDayEntry.createdAt;
+          // Validate date before calculating yearsAgo
+          if (!entryDate || isNaN(entryDate.getTime()) || entryDate.getTime() === 0) {
+            return null;
+          }
+          const yearsAgo = new Date().getFullYear() - entryDate.getFullYear();
+          // Sanity check
+          if (yearsAgo < 0 || yearsAgo > 100) {
+            return null;
+          }
+          return (
+            <OnThisDayCard
+              entry={onThisDayEntry}
+              yearsAgo={yearsAgo}
+              onPress={() => navigation.navigate('EntryDetail', { entryId: onThisDayEntry.id })}
+            />
+          );
+        })()}
 
         {pastEntryQuote && (
           <TouchableOpacity 

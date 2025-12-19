@@ -25,7 +25,12 @@ function RecentEntriesScreenBase({ entries }: RecentEntriesProps) {
   const sortedEntries = useMemo(
     () =>
       [...entries].sort(
-        (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+        (a, b) => {
+          // Handle invalid dates by putting them at the end
+          const aTime = a.createdAt && !isNaN(a.createdAt.getTime()) ? a.createdAt.getTime() : 0;
+          const bTime = b.createdAt && !isNaN(b.createdAt.getTime()) ? b.createdAt.getTime() : 0;
+          return bTime - aTime;
+        },
       ),
     [entries],
   );
@@ -68,7 +73,11 @@ function EntryItem({ entry, signals, onPress }: EntryItemProps) {
   const preview: EntryPreview = {
     id: entry.id,
     content: entry.content,
-    createdAt: entry.createdAt.toLocaleString(),
+    createdAt: entry.createdAt && !isNaN(entry.createdAt.getTime()) 
+      ? entry.createdAt.toLocaleString() 
+      : (entry.updatedAt && !isNaN(entry.updatedAt.getTime()) 
+        ? entry.updatedAt.toLocaleString() 
+        : 'Date unknown'),
     hasImages: !!entry.images && JSON.parse(entry.images).length > 0,
     hasVoiceNote: !!entry.voiceNote,
     aiMood: latestSignal?.mood,

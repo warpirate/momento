@@ -3,8 +3,18 @@ import { differenceInCalendarDays } from 'date-fns';
 export function calculateStreak(dates: Date[]): number {
   if (dates.length === 0) return 0;
 
+  // Filter out invalid dates
+  const validDates = dates.filter(date => {
+    if (!date || isNaN(date.getTime())) return false;
+    if (date.getTime() === 0) return false; // Epoch 0 (Jan 1, 1970)
+    if (date.getFullYear() < 2000) return false; // Unreasonably old dates
+    return true;
+  });
+
+  if (validDates.length === 0) return 0;
+
   // Sort dates descending
-  const sortedDates = [...dates].sort((a, b) => b.getTime() - a.getTime());
+  const sortedDates = [...validDates].sort((a, b) => b.getTime() - a.getTime());
   
   const today = new Date();
   const latestDate = sortedDates[0];
@@ -36,8 +46,18 @@ export function calculateStreak(dates: Date[]): number {
 export function isStreakAtRisk(dates: Date[]): boolean {
   if (dates.length === 0) return false;
   
+  // Filter out invalid dates
+  const validDates = dates.filter(date => {
+    if (!date || isNaN(date.getTime())) return false;
+    if (date.getTime() === 0) return false; // Epoch 0 (Jan 1, 1970)
+    if (date.getFullYear() < 2000) return false; // Unreasonably old dates
+    return true;
+  });
+
+  if (validDates.length === 0) return false;
+  
   // Sort dates descending
-  const sortedDates = [...dates].sort((a, b) => b.getTime() - a.getTime());
+  const sortedDates = [...validDates].sort((a, b) => b.getTime() - a.getTime());
   const latestDate = sortedDates[0];
   const today = new Date();
   
