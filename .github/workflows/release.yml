@@ -1,0 +1,106 @@
+name: Automated Release
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+      pull-requests: write
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Get current version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "current_version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Bump version
+        run: |
+          node scripts/bump-version.js
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "new_version=$NEW_VERSION" >> $GITHUB_ENV
+          echo "New version: $NEW_VERSION"
+
+      - name: Generate release notes
+        run: |
+          node scripts/generate-release-notes.js
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Create .env file
+        run: |
+          echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" > .env
+          echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env
+
+      - name: Build Android Release
+        run: |
+          cd android
+          ./gradlew assembleRelease
+          cd ..
+
+      - name: Rename APK
+        run: |
+          NEW_VERSION=$NEW_VERSION
+          mv android/app/build/outputs/apk/release/app-release.apk Momento-v$NEW_VERSION.apk
+
+      - name: Commit version bump
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add package.json android/app/build.gradle src/screens/SettingsScreen.tsx src/content/releaseNotes.generated.json
+          git commit -m "build: bump version to $NEW_VERSION"
+          git push
+
+      - name: Get release notes
+        id: release_notes
+        run: |
+          RELEASE_NOTES=$(node -p "
+            const notes = require('./src/content/releaseNotes.generated.json');
+            const version = '$NEW_VERSION';
+            const release = notes[version];
+            if (release) {
+              return '**' + release.title + '**\\n\\n' + 
+                     (release.description ? release.description + '\\n\\n' : '') +
+                     (release.changes.length > 0 ? 'Changes:\\n' + release.changes.map(c => '• ' + c).join('\\n') : '');
+            } else {
+              return 'Release version ' + version;
+            }
+          ")
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$RELEASE_NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.NEW_VERSION }}
+          name: Momento v${{ env.NEW_VERSION }}
+          body: ${{ steps.release_notes.outputs.notes }}
+          files: Momento-v${{ env.NEW_VERSION }}.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
