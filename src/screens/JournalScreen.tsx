@@ -170,10 +170,7 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
           record.userId = userId;
           if (finalImages.length > 0) record.images = JSON.stringify(finalImages);
           if (finalVoiceNote) record.voiceNote = finalVoiceNote;
-          // Explicitly set timestamps to ensure they're valid
-          // WatermelonDB's @date decorator should handle this, but we ensure it here
-          record.createdAt = new Date(now);
-          record.updatedAt = new Date(now);
+          // createdAt and updatedAt are handled automatically by WatermelonDB
         });
       });
 

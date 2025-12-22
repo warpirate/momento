@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Animated } from 'react-native';
 import { database } from '../db';
 import Entry from '../db/model/Entry';
 import { calculateStreak } from '../lib/streaks';
@@ -14,6 +14,7 @@ import { Card } from '../components/ui/Card';
 import { useTheme } from '../theme/theme';
 import Icon from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useSyncContext } from '../lib/SyncContext';
 import { getUnlockedBadges } from '../lib/gamification';
 import { EditProfileModal } from '../components/EditProfileModal';
 
@@ -38,6 +39,8 @@ export default function ProfileScreen() {
   const [session, setSession] = useState<Session | null>(null);
   const [stealthMode, setStealthMode] = useState(true);
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const rotateAnim = React.useRef(new Animated.Value(0)).current;
 
   const fetchSession = async () => {
     const { data } = await supabase.auth.getSession();
@@ -122,7 +125,57 @@ export default function ProfileScreen() {
     </Card>
   );
 
-  const unlockedBadges = getUnlockedBadges(stats);
+  const { sync } = useSyncContext();
+
+  const handleSync = async () => {
+    if (isSyncing) return;
+    
+    setIsSyncing(true);
+    
+    // Start rotation animation
+    Animated.loop(
+      Animated.timing(rotateAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      })
+    ).start();
+    
+    try {
+      await sync();
+      // Refresh stats after sync
+      const entries = await database.get<Entry>('entries').query().fetch();
+
+      const totalEntries = entries.length;
+      const currentStreak = calculateStreak(entries.map(e => e.createdAt));
+      const totalWords = entries.reduce(
+        (acc, entry) => acc + entry.content.split(/\s+/).length,
+        0,
+      );
+
+      let firstEntryDate: Date | null = null;
+      if (entries.length > 0) {
+        const sorted = entries.sort(
+          (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+        );
+        firstEntryDate = sorted[0].createdAt;
+      }
+
+      setStats({
+        totalEntries,
+        currentStreak,
+        totalWords,
+        firstEntryDate,
+      });
+    } catch (error) {
+      console.error('Sync failed:', error);
+    } finally {
+      // Stop animation and reset
+      rotateAnim.stopAnimation();
+      rotateAnim.setValue(0);
+      setIsSyncing(false);
+    }
+  };
 
   return (
     <ScreenLayout>
@@ -131,6 +184,18 @@ export default function ProfileScreen() {
           <Icon name="arrow-left" size={24} color={colors.primary} />
         </TouchableOpacity>
         <Typography variant="heading" style={styles.headerTitle}>Account</Typography>
+        <TouchableOpacity 
+          onPress={handleSync} 
+          style={styles.syncButton}
+          disabled={isSyncing}
+        >
+          <Animated.View style={{ transform: [{ rotate: rotateAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: ['0deg', '360deg']
+          })}] }}>
+            <Icon name="refresh-cw" size={24} color={isSyncing ? colors.textMuted : colors.primary} />
+          </Animated.View>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={styles.settingsButton}>
           <Icon name="settings" size={24} color={colors.primary} />
         </TouchableOpacity>
@@ -253,6 +318,9 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   settingsButton: {
+    padding: 8,
+  },
+  syncButton: {
     padding: 8,
   },
   content: {

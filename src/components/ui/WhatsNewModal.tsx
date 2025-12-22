@@ -91,7 +91,7 @@ export function WhatsNewModal({ visible, content, onClose }: Props) {
         >
           <View style={styles.headerRow}>
             <View style={[styles.badge, { backgroundColor: colors.primary + '18' }]}>
-              <Icon name="sparkles" size={18} color={colors.primary} />
+              <Icon name="star" size={18} color={colors.primary} />
             </View>
             <View style={{ flex: 1, marginLeft: spacing.m }}>
               <Typography variant="subheading" style={{ marginBottom: 2 }}>

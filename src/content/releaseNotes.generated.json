@@ -17,5 +17,11 @@
     "title": "Merge pull request #6 from warpirate/test",
     "description": "",
     "changes": []
+  },
+  "0.0.12": {
+    "version": "0.0.12",
+    "title": "Merge branch 'main' of https://github.com/warpirate/momento",
+    "description": "",
+    "changes": []
   }
 }
