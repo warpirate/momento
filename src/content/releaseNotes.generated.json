@@ -23,5 +23,20 @@
     "title": "Merge branch 'main' of https://github.com/warpirate/momento",
     "description": "",
     "changes": []
+  },
+  "0.0.14": {
+    "version": "0.0.14",
+    "title": "feat: Add sync functionality and fix critical bugs v0.0.13",
+    "description": "",
+    "changes": [
+      "Add sync button with rotation animation to ProfileScreen",
+      "Fix readonly createdAt field error in JournalScreen entry creation",
+      "Replace invalid 'sparkles' icon with 'star' in WhatsNewModal",
+      "Add automated release workflow for version management",
+      "Update app version to 0.0.13 for release",
+      "Fix timezone issues for entry timestamps",
+      "New sync feature in profile screen with visual feedback",
+      "Bug fix for entry creation that was causing readonly field errors"
+    ]
   }
 }
