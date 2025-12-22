@@ -56,5 +56,11 @@
     "title": "trigger: force workflow run to build APK",
     "description": "",
     "changes": []
+  },
+  "0.0.18": {
+    "version": "0.0.18",
+    "title": "merge: pull latest changes",
+    "description": "",
+    "changes": []
   }
 }
