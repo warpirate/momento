@@ -50,5 +50,11 @@
     "title": "Merge branch 'main' of https://github.com/warpirate/momento",
     "description": "",
     "changes": []
+  },
+  "0.0.17": {
+    "version": "0.0.17",
+    "title": "trigger: force workflow run to build APK",
+    "description": "",
+    "changes": []
   }
 }
