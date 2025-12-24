@@ -11,7 +11,6 @@ export type RootStackParamList = {
   DailyEntries: { date: string };
   Camera: { onMediaCaptured: (uri: string, type: 'photo' | 'video') => void };
   Search: undefined;
-  Insights: undefined;
   NotificationSettings: undefined;
   Feedback: undefined;
   PreviousFeedback: undefined;

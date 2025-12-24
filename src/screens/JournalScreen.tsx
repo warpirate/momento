@@ -33,16 +33,12 @@ import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIc
 import { useSyncContext } from '../lib/SyncContext';
 import { useAlert } from '../context/AlertContext';
 import { haptics } from '../lib/haptics';
-import { TrendAlertCard } from '../components/TrendAlertCard';
-import { analyzeTrends, TrendAlert, EntrySignal } from '../lib/trendAnalysis';
-import EntrySignalModel from '../db/model/EntrySignal';
 import { NotificationBell } from '../components/NotificationBell';
 import { NotificationInbox } from '../components/NotificationInbox';
 import { useNotifications } from '../context/NotificationContext';
 import { 
   checkStreakNotifications, 
   checkAchievementNotifications, 
-  checkInsightNotifications,
   getTotalWords 
 } from '../lib/notificationTriggers';
 import { 
@@ -53,10 +49,9 @@ import {
 type JournalScreenProps = {
   userId: string;
   entries: Entry[];
-  signals: EntrySignalModel[];
 };
 
-function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
+function JournalScreen({ userId, entries }: JournalScreenProps) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const rootNavigation = navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
   const { colors, spacing } = useTheme();
@@ -68,7 +63,6 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [syncInitialized, setSyncInitialized] = useState(false);
   const [showStreakModal, setShowStreakModal] = useState(false);
-  const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([]);
   const [showNotificationInbox, setShowNotificationInbox] = useState(false);
   const { createNotification, showToast } = useNotifications();
   const { markHasUnsyncedEntries, isOnline } = useSyncContext();
@@ -203,7 +197,6 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
   async function checkNotificationTriggers() {
     try {
       const allEntries = await database.get<Entry>('entries').query().fetch();
-      const allSignals = await database.get<EntrySignalModel>('entry_signals').query().fetch();
 
       // Get previous stats from storage
       const statsKey = `momento:stats:${userId}`;
@@ -248,16 +241,6 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
             await createNotification(notif.type, notif.title, notif.message, notif.data, false);
             showToast(notif.title, notif.message, 'success');
             await markNotificationSent(`achievement_${notif.data?.badgeId}`);
-          }
-        }
-      }
-
-      // Check for insights (less frequently - only if we have enough data)
-      if (allEntries.length >= 7 && allEntries.length % 5 === 0) {
-        const insightNotifs = checkInsightNotifications(allEntries, allSignals);
-        for (const notif of insightNotifs) {
-          if (notif.shouldNotify && notif.type && notif.title && notif.message) {
-            await createNotification(notif.type, notif.title, notif.message, notif.data, false);
           }
         }
       }
@@ -360,24 +343,6 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
     };
   }, [sortedEntries]);
 
-  // Analyze trends and generate alerts
-  const trendAlerts = useMemo(() => {
-    const signalsData: EntrySignal[] = signals.map(s => ({
-      id: s.id,
-      entryId: s.id, // Use signal ID as proxy since entry relation is lazy
-      mood: s.mood || undefined,
-      sentimentScore: s.sentimentScore ?? undefined,
-      activities: s.activities || undefined,
-      people: s.people || undefined,
-    }));
-    
-    const alerts = analyzeTrends(sortedEntries, signalsData);
-    return alerts.filter(a => !dismissedAlerts.includes(a.type));
-  }, [sortedEntries, signals, dismissedAlerts]);
-
-  const handleDismissAlert = (alertType: string) => {
-    setDismissedAlerts(prev => [...prev, alertType]);
-  };
 
   return (
     <ScreenLayout>
@@ -385,7 +350,7 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
         <View style={styles.headerRow}>
           <View>
             <Typography variant="heading">Momento</Typography>
-            <Typography variant="body">Journal first. Insights later.</Typography>
+            <Typography variant="body">Your personal journal</Typography>
           </View>
           <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
             {streak > 0 && (
@@ -440,14 +405,6 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
           disabled={saving}
           style={{ marginTop: spacing.m }}
         />
-
-        {trendAlerts.map((alert) => (
-          <TrendAlertCard
-            key={alert.type}
-            alert={alert}
-            onDismiss={() => handleDismissAlert(alert.type)}
-          />
-        ))}
 
         {onThisDayEntry && (() => {
           const entryDate = onThisDayEntry.createdAt;
@@ -519,29 +476,24 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
 
 const EnhancedEntryPreviewCard = withObservables(['entry'], ({ entry }: { entry: Entry }) => ({
   entry,
-  signals: entry.signals,
-}))(({ entry, signals }: { entry: Entry; signals: any[] }) => {
-  
-  const latestSignal = signals.length > 0 ? signals[0] : null;
-  const tags: string[] = [];
-  if (latestSignal?.mood) tags.push(latestSignal.mood);
-  if (Array.isArray(latestSignal?.activities)) tags.push(...latestSignal.activities.slice(0, 2));
-
+}))(({ entry }: { entry: Entry }) => {
   const images = entry.images ? JSON.parse(entry.images) : [];
   const hasVideos = images.some((uri: string) => uri.endsWith('.mp4') || uri.endsWith('.mov'));
   const hasImages = images.some((uri: string) => !uri.endsWith('.mp4') && !uri.endsWith('.mov'));
 
-  const item: EntryPreview = {
+  const preview: EntryPreview = {
     id: entry.id,
     content: entry.content,
-    createdAt: formatTimestamp(entry.createdAt),
-    tags: tags.length ? tags.slice(0, 2) : undefined,
-    hasImages,
-    hasVideos,
+    createdAt: entry.createdAt && !isNaN(entry.createdAt.getTime()) 
+      ? entry.createdAt.toLocaleString() 
+      : (entry.updatedAt && !isNaN(entry.updatedAt.getTime()) 
+        ? entry.updatedAt.toLocaleString() 
+        : 'Date unknown'),
+    hasImages: !!entry.images && JSON.parse(entry.images).length > 0,
     hasVoiceNote: !!entry.voiceNote,
   };
 
-  return <EntryPreviewCard item={item} />;
+  return <EntryPreviewCard item={preview} />;
 });
 
 
@@ -631,7 +583,6 @@ const styles = StyleSheet.create({
 
 const enhance = withObservables(['userId'], ({ userId }) => ({
   entries: database.get<Entry>('entries').query().observe(),
-  signals: database.get<EntrySignalModel>('entry_signals').query().observe(),
 }));
 
 export default function JournalScreenWrapper() {

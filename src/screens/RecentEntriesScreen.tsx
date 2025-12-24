@@ -7,7 +7,6 @@ import { Typography } from '../components/ui/Typography';
 import { useTheme } from '../theme/theme';
 import { database } from '../db';
 import Entry from '../db/model/Entry';
-import EntrySignal from '../db/model/EntrySignal';
 import { EntryPreview, EntryPreviewCard } from '../components/EntryPreviewCard';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -49,7 +48,7 @@ function RecentEntriesScreenBase({ entries }: RecentEntriesProps) {
           contentContainerStyle={[styles.listContent, { paddingBottom: spacing.xl }]}
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
-            <EnhancedEntryItem
+            <EntryItem
               entry={item}
               onPress={() => navigation.navigate('EntryDetail', { entryId: item.id })}
             />
@@ -60,16 +59,12 @@ function RecentEntriesScreenBase({ entries }: RecentEntriesProps) {
   );
 }
 
-// Enhanced entry item that observes signals
 type EntryItemProps = {
   entry: Entry;
-  signals: EntrySignal[];
   onPress: () => void;
 };
 
-function EntryItem({ entry, signals, onPress }: EntryItemProps) {
-  const latestSignal = signals.length > 0 ? signals[0] : null;
-  
+function EntryItem({ entry, onPress }: EntryItemProps) {
   const preview: EntryPreview = {
     id: entry.id,
     content: entry.content,
@@ -80,9 +75,6 @@ function EntryItem({ entry, signals, onPress }: EntryItemProps) {
         : 'Date unknown'),
     hasImages: !!entry.images && JSON.parse(entry.images).length > 0,
     hasVoiceNote: !!entry.voiceNote,
-    aiMood: latestSignal?.mood,
-    aiTags: latestSignal?.tags,
-    sentimentScore: latestSignal?.sentimentScore,
   };
 
   return (
@@ -91,11 +83,6 @@ function EntryItem({ entry, signals, onPress }: EntryItemProps) {
     </TouchableOpacity>
   );
 }
-
-const EnhancedEntryItem = withObservables(['entry'], ({ entry }: { entry: Entry; onPress: () => void }) => ({
-  entry,
-  signals: entry.signals,
-}))(EntryItem);
 
 const enhance = withObservables([], () => ({
   entries: database.get<Entry>('entries').query().observe(),

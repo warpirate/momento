@@ -1,11 +1,10 @@
 import Entry from '../db/model/Entry';
-import EntrySignalModel from '../db/model/EntrySignal';
 import { calculateStreak } from './streaks';
 import { getUnlockedBadges } from './gamification';
 
 export interface NotificationTriggerResult {
   shouldNotify: boolean;
-  type?: 'streak_milestone' | 'streak_at_risk' | 'achievement' | 'insight' | 'weekly_summary';
+  type?: 'streak_milestone' | 'streak_at_risk' | 'achievement' | 'weekly_summary';
   title?: string;
   message?: string;
   data?: Record<string, any>;
@@ -111,94 +110,6 @@ export function getTotalWords(entries: Entry[]): number {
     const words = entry.content.trim().split(/\s+/).filter(w => w.length > 0);
     return total + words.length;
   }, 0);
-}
-
-// Check for pattern insights
-export function checkInsightNotifications(
-  entries: Entry[],
-  signals: EntrySignalModel[]
-): NotificationTriggerResult[] {
-  const results: NotificationTriggerResult[] = [];
-
-  if (entries.length < 7) return results;
-
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  
-  const recentEntries = entries.filter(e => e.createdAt >= sevenDaysAgo);
-  if (recentEntries.length < 5) return results;
-
-  const recentSignals = signals.filter(s => s.createdAt >= sevenDaysAgo);
-
-  // Check for mood patterns
-  const moods = recentSignals
-    .map(s => s.mood)
-    .filter(m => m && m.length > 0);
-
-  if (moods.length >= 5) {
-    const moodCounts: Record<string, number> = {};
-    moods.forEach(mood => {
-      if (mood) {
-        moodCounts[mood] = (moodCounts[mood] || 0) + 1;
-      }
-    });
-
-    const dominantMood = Object.entries(moodCounts)
-      .sort(([, a], [, b]) => b - a)[0];
-
-    if (dominantMood && dominantMood[1] >= 4) {
-      const [mood, count] = dominantMood;
-      
-      if (mood.toLowerCase().includes('stress') || mood.toLowerCase().includes('anxious')) {
-        results.push({
-          shouldNotify: true,
-          type: 'insight',
-          title: 'Pattern Noticed',
-          message: `You've mentioned feeling ${mood} often this week. Consider a moment for self-care.`,
-          data: { pattern: 'mood', mood, count },
-        });
-      } else if (mood.toLowerCase().includes('happy') || mood.toLowerCase().includes('grateful')) {
-        results.push({
-          shouldNotify: true,
-          type: 'insight',
-          title: 'Positive Pattern! ✨',
-          message: `You've been feeling ${mood} a lot lately. That's wonderful to see!`,
-          data: { pattern: 'mood', mood, count },
-        });
-      }
-    }
-  }
-
-  // Check for frequent activities
-  const allActivities: string[] = [];
-  recentSignals.forEach(s => {
-    if (s.activities && Array.isArray(s.activities)) {
-      allActivities.push(...s.activities);
-    }
-  });
-
-  if (allActivities.length >= 5) {
-    const activityCounts: Record<string, number> = {};
-    allActivities.forEach(activity => {
-      activityCounts[activity] = (activityCounts[activity] || 0) + 1;
-    });
-
-    const topActivity = Object.entries(activityCounts)
-      .sort(([, a], [, b]) => b - a)[0];
-
-    if (topActivity && topActivity[1] >= 4) {
-      const [activity, count] = topActivity;
-      results.push({
-        shouldNotify: true,
-        type: 'insight',
-        title: 'Reflection Insight',
-        message: `You've written about "${activity}" ${count} times this week. Want to explore that further?`,
-        data: { pattern: 'activity', activity, count },
-      });
-    }
-  }
-
-  return results;
 }
 
 // Check if it's time for weekly summary

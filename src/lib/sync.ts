@@ -104,40 +104,6 @@ export async function sync() {
           }
         }
 
-        // 2) entry_signals table
-        if (changes.entry_signals?.created?.length > 0) {
-          const createdSignalIds = changes.entry_signals.created.map((s: any) => s.id);
-          try {
-            const existingSignalRecords = await database
-              .get('entry_signals')
-              .query(Q.where('id', Q.oneOf(createdSignalIds)))
-              .fetch();
-            const existingSignalIds = new Set(existingSignalRecords.map(r => r.id));
-
-            if (existingSignalIds.size > 0) {
-              console.log(
-                'Found existing entry_signals records in created list, moving to updated:',
-                Array.from(existingSignalIds),
-              );
-              const newCreatedSignals: any[] = [];
-              const newUpdatedSignals = changes.entry_signals.updated || [];
-
-              for (const signal of changes.entry_signals.created) {
-                if (existingSignalIds.has(signal.id)) {
-                  newUpdatedSignals.push(signal);
-                } else {
-                  newCreatedSignals.push(signal);
-                }
-              }
-
-              changes.entry_signals.created = newCreatedSignals;
-              changes.entry_signals.updated = newUpdatedSignals;
-            }
-          } catch (err) {
-            console.warn('Error checking for existing entry_signals records:', err);
-          }
-        }
-
         console.log('Timestamp from server:', timestamp);
         return { changes, timestamp: Math.floor(timestamp) };
       },
@@ -236,14 +202,6 @@ export function setupRealtimeSubscription(userId: string) {
       { event: '*', schema: 'public', table: 'entries', filter: `user_id=eq.${userId}` },
       (payload) => {
         console.log('Realtime change detected in entries:', payload);
-        sync();
-      }
-    )
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'entry_signals' },
-      (payload) => {
-        console.log('Realtime change detected in entry_signals:', payload);
         sync();
       }
     )

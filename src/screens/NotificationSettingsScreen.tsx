@@ -224,14 +224,6 @@ export default function NotificationSettingsScreen() {
             disabled={!preferences.enabled}
           />
 
-          <SettingRow
-            icon="eye"
-            label="Insights"
-            description="Get notified about patterns in your entries"
-            value={preferences.insightAlerts}
-            onToggle={(v) => handleToggle('insightAlerts', v)}
-            disabled={!preferences.enabled}
-          />
 
           <SettingRow
             icon="award"

@@ -56,5 +56,15 @@ export default schemaMigrations({
       },
     ],
   },
+  {
+    // Version 6: Remove entry_signals table (AI insights feature removed)
+    toVersion: 6,
+    steps: [
+      {
+        type: 'sql',
+        sql: 'DROP TABLE IF EXISTS entry_signals;',
+      },
+    ],
+  },
   ],
 });

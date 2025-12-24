@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Entry from '../db/model/Entry';
-import EntrySignalModel from '../db/model/EntrySignal';
 import { notificationService } from './notificationService';
 import { 
   checkStreakAtRisk, 

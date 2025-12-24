@@ -7,7 +7,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export const CHANNEL_IDS = {
   REMINDERS: 'momento-reminders',
   STREAKS: 'momento-streaks',
-  INSIGHTS: 'momento-insights',
   ACHIEVEMENTS: 'momento-achievements',
 };
 
@@ -17,7 +16,6 @@ export type NotificationType =
   | 'streak_at_risk'
   | 'streak_milestone'
   | 'weekly_summary'
-  | 'insight'
   | 'achievement';
 
 // Notification data structure
@@ -37,7 +35,6 @@ export interface NotificationPreferences {
   dailyReminder: boolean;
   reminderTime: string; // HH:mm format
   streakAlerts: boolean;
-  insightAlerts: boolean;
   achievementAlerts: boolean;
   weeklySummary: boolean;
 }
@@ -47,7 +44,6 @@ const DEFAULT_PREFERENCES: NotificationPreferences = {
   dailyReminder: true,
   reminderTime: '21:00',
   streakAlerts: true,
-  insightAlerts: true,
   achievementAlerts: true,
   weeklySummary: true,
 };
@@ -127,17 +123,6 @@ class NotificationService {
 
     PushNotification.createChannel(
       {
-        channelId: CHANNEL_IDS.INSIGHTS,
-        channelName: 'Insights',
-        channelDescription: 'Pattern discoveries and reflections',
-        importance: Importance.DEFAULT,
-        vibrate: false,
-      },
-      (created) => console.log(`Insights channel created: ${created}`)
-    );
-
-    PushNotification.createChannel(
-      {
         channelId: CHANNEL_IDS.ACHIEVEMENTS,
         channelName: 'Achievements',
         channelDescription: 'Badge unlocks and milestones',
@@ -201,8 +186,8 @@ class NotificationService {
     
     if (type.includes('streak')) {
       channelId = CHANNEL_IDS.STREAKS;
-    } else if (type === 'insight' || type === 'weekly_summary') {
-      channelId = CHANNEL_IDS.INSIGHTS;
+    } else if (type === 'weekly_summary') {
+      channelId = CHANNEL_IDS.REMINDERS;
     } else if (type === 'achievement') {
       channelId = CHANNEL_IDS.ACHIEVEMENTS;
     }

@@ -53,7 +53,7 @@
   },
   "0.0.17": {
     "version": "0.0.17",
-    "title": "trigger: force workflow run to build APK",
+    "title": "merge: pull latest changes",
     "description": "",
     "changes": []
   },

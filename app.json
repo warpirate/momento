@@ -4,7 +4,7 @@
   "expo": {
     "name": "Momento",
     "slug": "momento",
-    "version": "1.0.0",
+    "version": "0.0.19",
     "orientation": "portrait",
     "icon": "./assets/logos/1024x1024.png",
     "splash": {

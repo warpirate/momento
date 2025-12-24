@@ -12,7 +12,6 @@ import { haptics } from '../lib/haptics';
 // Screens
 import AuthScreen from '../screens/AuthScreen';
 import JournalScreenWrapper from '../screens/JournalScreen';
-import InsightsScreen from '../screens/InsightsScreen';
 import CalendarScreen from '../screens/CalendarScreen';
 import SearchScreen from '../screens/SearchScreen';
 import EntryDetailScreen from '../screens/EntryDetailScreen';
@@ -248,7 +247,6 @@ export function Navigation({ session }: { session: any }) {
             <Stack.Screen name="DailyEntries" component={DailyEntriesScreen} />
             <Stack.Screen name="Camera" component={CameraScreen} options={{ presentation: 'fullScreenModal' }} />
             <Stack.Screen name="Search" component={SearchScreen} />
-            <Stack.Screen name="Insights" component={InsightsScreen} />
             <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
             <Stack.Screen name="Feedback" component={FeedbackScreen} />
             <Stack.Screen name="PreviousFeedback" component={PreviousFeedbackScreen} />
