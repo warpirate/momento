@@ -79,8 +79,8 @@ android {
         applicationId "com.momento"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 15
-        versionName "0.0.18"
+        versionCode 16
+        versionName "0.0.20"
     }
     signingConfigs {
         debug {

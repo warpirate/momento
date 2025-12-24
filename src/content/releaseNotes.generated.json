@@ -62,5 +62,11 @@
     "title": "merge: pull latest changes",
     "description": "",
     "changes": []
+  },
+  "0.0.20": {
+    "version": "0.0.20",
+    "title": "chore: remove AI insights feature and prepare for release - Removed AI insights feature and all related components - Cleaned up database schema by removing entry_signals table - Updated dependencies and version numbers - Improved app performance by removing unused AI processing - Fixed potential memory leaks in entry handling - Updated documentation to reflect feature removal",
+    "description": "",
+    "changes": []
   }
 }
