@@ -71,15 +71,8 @@
   },
   "0.0.20": {
     "version": "0.0.20",
-    "title": "fix: Global sync issue - entries not loading across app",
+    "title": "fix: pull all historical entries on fresh install",
     "description": "",
-    "changes": [
-      "Calendar screen showing no entries",
-      "Recent entries screen empty",
-      "All screens not syncing data from Supabase",
-      "SyncProvider never triggered initial sync on app startup",
-      "Realtime subscriptions only set up in JournalScreen",
-      "Local WatermelonDB remained empty after login"
-    ]
+    "changes": []
   }
 }

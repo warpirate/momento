@@ -31,8 +31,13 @@ function AppContent(): React.JSX.Element {
   const [isWhatsNewVisible, setIsWhatsNewVisible] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({data}) => {
-      setSession(data.session ?? null);
+    supabase.auth.getSession().then(({data, error}) => {
+      if (error) {
+        console.warn('Session restore error:', error.message);
+        setSession(null);
+      } else {
+        setSession(data.session ?? null);
+      }
       setInitializing(false);
     });
 
