@@ -62,5 +62,11 @@
     "title": "merge: pull latest changes",
     "description": "",
     "changes": []
+  },
+  "0.0.19": {
+    "version": "0.0.19",
+    "title": "build: bump version to 0.0.18",
+    "description": "",
+    "changes": []
   }
 }
