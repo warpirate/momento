@@ -28,21 +28,25 @@ export async function sync() {
           console.log('User ID:', session.user.id);
         }
         
-        // Check if we have entries with invalid timestamps that need fixing
-        // If so, force a full pull by using timestamp 0
         let needsFullSync = false;
         try {
           const allEntries = await database.get('entries').query().fetch();
-          const invalidEntries = allEntries.filter((entry: any) => {
-            const createdAt = entry.createdAt;
-            return !createdAt || isNaN(createdAt.getTime()) || createdAt.getTime() === 0 || createdAt.getFullYear() < 2000;
-          });
-          if (invalidEntries.length > 0) {
-            console.log(`Found ${invalidEntries.length} entries with invalid timestamps, forcing full sync`);
+          
+          if (allEntries.length === 0) {
             needsFullSync = true;
+          } else {
+            const invalidEntries = allEntries.filter((entry: any) => {
+              const createdAt = entry.createdAt;
+              return !createdAt || isNaN(createdAt.getTime()) || createdAt.getTime() === 0 || createdAt.getFullYear() < 2000;
+            });
+            if (invalidEntries.length > 0) {
+              console.log(`Found ${invalidEntries.length} entries with invalid timestamps, forcing full sync`);
+              needsFullSync = true;
+            }
           }
         } catch (err) {
           console.warn('Error checking for invalid timestamps:', err);
+          needsFullSync = true;
         }
         
         // Force a fresh pull - use 0 to get all entries if we have invalid timestamps
