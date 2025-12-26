@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import NetInfo from '@react-native-community/netinfo';
-import { sync as runSync } from './sync';
+import { sync as runSync, setupRealtimeSubscription } from './sync';
+import { supabase } from './supabaseClient';
 
 type SyncContextValue = {
   isOnline: boolean;
@@ -22,6 +23,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const [hasUnsyncedEntries, setHasUnsyncedEntries] = useState(false);
   const [showSyncPrompt, setShowSyncPrompt] = useState(false);
   const [showSyncSuccess, setShowSyncSuccess] = useState(false);
+  const [initialSyncDone, setInitialSyncDone] = useState(false);
 
   // Track network status
   useEffect(() => {
@@ -37,6 +39,49 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
     return () => unsubscribe();
   }, [hasUnsyncedEntries]);
+
+  // Perform initial sync and setup realtime subscription when provider mounts
+  useEffect(() => {
+    let unsubscribeRealtime: (() => void) | null = null;
+
+    const initializeSync = async () => {
+      if (!initialSyncDone && isOnline) {
+        console.log('SyncProvider: Performing initial sync on mount...');
+        setInitialSyncDone(true);
+        
+        try {
+          // Get current user session
+          const { data: { session } } = await supabase.auth.getSession();
+          
+          if (session?.user?.id) {
+            console.log('SyncProvider: User authenticated, setting up sync and realtime');
+            
+            // Perform initial sync
+            await runSync();
+            console.log('SyncProvider: Initial sync completed successfully');
+            setLastSyncAt(new Date());
+            
+            // Setup realtime subscription for automatic sync
+            unsubscribeRealtime = setupRealtimeSubscription(session.user.id);
+            console.log('SyncProvider: Realtime subscription established');
+          } else {
+            console.log('SyncProvider: No authenticated user, skipping sync');
+          }
+        } catch (err) {
+          console.warn('SyncProvider: Initial sync failed', err);
+        }
+      }
+    };
+
+    initializeSync();
+
+    return () => {
+      if (unsubscribeRealtime) {
+        console.log('SyncProvider: Cleaning up realtime subscription');
+        unsubscribeRealtime();
+      }
+    };
+  }, [initialSyncDone, isOnline]);
 
   const sync = async () => {
     if (isSyncing) return;
