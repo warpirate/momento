@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
 import { database } from '../db';
 import Entry from '../db/model/Entry';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { ScreenLayout } from '../components/ui/ScreenLayout';
@@ -10,21 +10,64 @@ import { Typography } from '../components/ui/Typography';
 import { Card } from '../components/ui/Card';
 import { useTheme } from '../theme/theme';
 import Icon from 'react-native-vector-icons/Feather';
+import { useSyncContext } from '../lib/SyncContext';
 
 export default function CalendarScreen() {
   console.log('Render CalendarScreen');
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors, spacing, borderRadius } = useTheme();
+  const { sync, isSyncing } = useSyncContext();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [calendarDays, setCalendarDays] = useState<Date[]>([]);
 
+  const fetchEntries = async () => {
+    console.log('Fetching entries from local database...');
+    const allEntries = await database.get<Entry>('entries').query().fetch();
+    console.log(`Found ${allEntries.length} entries in local database`);
+    setEntries(allEntries);
+  };
+
+  // Trigger sync and fetch entries when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      let isActive = true;
+
+      const syncAndFetch = async () => {
+        try {
+          console.log('CalendarScreen: Triggering sync...');
+          await sync();
+          if (isActive) {
+            await fetchEntries();
+          }
+        } catch (error) {
+          console.error('CalendarScreen: Sync failed', error);
+          // Still fetch local entries even if sync fails
+          if (isActive) {
+            await fetchEntries();
+          }
+        }
+      };
+
+      syncAndFetch();
+
+      return () => {
+        isActive = false;
+      };
+    }, [])
+  );
+
+  // Also set up a database observer to refresh when entries change
   useEffect(() => {
-    const fetchEntries = async () => {
-      const allEntries = await database.get<Entry>('entries').query().fetch();
-      setEntries(allEntries);
-    };
-    fetchEntries();
+    const subscription = database.get<Entry>('entries')
+      .query()
+      .observe()
+      .subscribe(entries => {
+        console.log(`CalendarScreen: Database observer triggered, ${entries.length} entries`);
+        setEntries(entries);
+      });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
