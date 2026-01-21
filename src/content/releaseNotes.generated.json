@@ -74,5 +74,17 @@
     "title": "fix: handle invalid refresh token on app reinstall",
     "description": "",
     "changes": []
+  },
+  "0.0.21": {
+    "version": "0.0.21",
+    "title": "refactor: remove EntrySignal model and related logic; update database schema and sync processes",
+    "description": "",
+    "changes": [
+      "Removed EntrySignal model and all associated references throughout the codebase.",
+      "Updated database schema to reflect the removal of the entry_signals table.",
+      "Adjusted sync logic to eliminate handling of signals, ensuring smooth operation without them.",
+      "Refactored screens and components to remove dependencies on signals, simplifying data handling.",
+      "Updated release workflow to accommodate changes in APK naming conventions and build variants."
+    ]
   }
 }
