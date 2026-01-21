@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
 import { database } from '../db';
-import EntrySignal from '../db/model/EntrySignal';
 import Entry from '../db/model/Entry';
 import { ScreenLayout } from '../components/ui/ScreenLayout';
 import { Typography } from '../components/ui/Typography';
@@ -29,52 +28,22 @@ export default function InsightsScreen() {
 
   useEffect(() => {
     const fetchInsights = async () => {
-      const [signals, entries] = await Promise.all([
-        database.get<EntrySignal>('entry_signals').query().fetch(),
-        database.get<Entry>('entries').query().fetch(),
-      ]);
+      const entries = await database.get<Entry>('entries').query().fetch();
 
       const moods: Record<string, number> = {};
-      const activities: Record<string, number> = {};
-      let totalSentiment = 0;
-      let sentimentCount = 0;
       entries.forEach(entry => {
-        // Legacy support for manual mood ratings
+        // Manual mood ratings from entries
         if (entry.moodRating) {
           moods[entry.moodRating] = (moods[entry.moodRating] || 0) + 1;
         }
       });
 
-      signals.forEach(signal => {
-        // AI Moods
-        if (signal.mood) {
-           moods[signal.mood] = (moods[signal.mood] || 0) + 1;
-        }
-
-        // Activities
-        if (Array.isArray(signal.activities)) {
-          signal.activities.forEach(activity => {
-            activities[activity] = (activities[activity] || 0) + 1;
-          });
-        }
-
-        // Sentiment
-        if (signal.sentimentScore !== undefined) {
-          totalSentiment += signal.sentimentScore;
-          sentimentCount++;
-        }
-      });
-
       setMoodCounts(moods);
-      setTopActivities(
-        Object.entries(activities)
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 5)
-          .map(([name, count]) => ({ name, count }))
-      );
-      setAverageSentiment(sentimentCount > 0 ? totalSentiment / sentimentCount : 0);
+      // Entry signals have been removed - activities and sentiment no longer available
+      setTopActivities([]);
+      setAverageSentiment(0);
 
-      // Basic journal stats so the page is still useful even before signals exist
+      // Basic journal stats
       const totalEntries = entries.length;
       const now = new Date();
       const weekAgo = new Date(

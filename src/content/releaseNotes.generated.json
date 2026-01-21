@@ -71,7 +71,7 @@
   },
   "0.0.20": {
     "version": "0.0.20",
-    "title": "fix: pull all historical entries on fresh install",
+    "title": "fix: handle invalid refresh token on app reinstall",
     "description": "",
     "changes": []
   }

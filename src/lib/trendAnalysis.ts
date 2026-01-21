@@ -34,15 +34,8 @@ export function analyzeTrends(
   
   if (entries.length === 0) return alerts;
   
-  // Filter out entries with invalid dates and sort by date (newest first)
-  const validEntries = entries.filter(entry => {
-    const date = entry.createdAt;
-    if (!date || isNaN(date.getTime())) return false;
-    if (date.getTime() === 0) return false; // Epoch 0 (Jan 1, 1970)
-    if (date.getFullYear() < 2000) return false; // Unreasonably old dates
-    return true;
-  });
-  const sortedEntries = validEntries.sort(
+  // Sort entries by date (newest first)
+  const sortedEntries = [...entries].sort(
     (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
   );
   
@@ -53,32 +46,26 @@ export function analyzeTrends(
   // Check for absence (haven't journaled in X days)
   const lastEntryDate = sortedEntries[0]?.createdAt;
   if (lastEntryDate) {
-    // Validate date before calculating
-    if (lastEntryDate && !isNaN(lastEntryDate.getTime()) && lastEntryDate.getTime() !== 0) {
-      const daysSinceLastEntry = Math.floor(
-        (Date.now() - lastEntryDate.getTime()) / (1000 * 60 * 60 * 24)
-      );
-      
-      // Sanity check: if daysSinceLastEntry is unreasonably large, skip
-      if (daysSinceLastEntry >= 0 && daysSinceLastEntry < 36500) {
-        if (daysSinceLastEntry >= 3 && daysSinceLastEntry < 7) {
-          alerts.push({
-            type: 'absence',
-            title: 'Missing you',
-            message: `It's been ${daysSinceLastEntry} days since your last entry. How are you feeling?`,
-            severity: 'info',
-            icon: 'clock',
-          });
-        } else if (daysSinceLastEntry >= 7) {
-          alerts.push({
-            type: 'absence',
-            title: 'Time to reconnect',
-            message: `It's been over a week. Taking a moment to reflect can help.`,
-            severity: 'warning',
-            icon: 'alert-circle',
-          });
-        }
-      }
+    const daysSinceLastEntry = Math.floor(
+      (Date.now() - lastEntryDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    
+    if (daysSinceLastEntry >= 3 && daysSinceLastEntry < 7) {
+      alerts.push({
+        type: 'absence',
+        title: 'Missing you',
+        message: `It's been ${daysSinceLastEntry} days since your last entry. How are you feeling?`,
+        severity: 'info',
+        icon: 'clock',
+      });
+    } else if (daysSinceLastEntry >= 7) {
+      alerts.push({
+        type: 'absence',
+        title: 'Time to reconnect',
+        message: `It's been over a week. Taking a moment to reflect can help.`,
+        severity: 'warning',
+        icon: 'alert-circle',
+      });
     }
   }
   

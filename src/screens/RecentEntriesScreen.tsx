@@ -7,7 +7,6 @@ import { Typography } from '../components/ui/Typography';
 import { useTheme } from '../theme/theme';
 import { database } from '../db';
 import Entry from '../db/model/Entry';
-import EntrySignal from '../db/model/EntrySignal';
 import { EntryPreview, EntryPreviewCard } from '../components/EntryPreviewCard';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -25,12 +24,7 @@ function RecentEntriesScreenBase({ entries }: RecentEntriesProps) {
   const sortedEntries = useMemo(
     () =>
       [...entries].sort(
-        (a, b) => {
-          // Handle invalid dates by putting them at the end
-          const aTime = a.createdAt && !isNaN(a.createdAt.getTime()) ? a.createdAt.getTime() : 0;
-          const bTime = b.createdAt && !isNaN(b.createdAt.getTime()) ? b.createdAt.getTime() : 0;
-          return bTime - aTime;
-        },
+        (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
       ),
     [entries],
   );
@@ -60,29 +54,19 @@ function RecentEntriesScreenBase({ entries }: RecentEntriesProps) {
   );
 }
 
-// Enhanced entry item that observes signals
+// Entry item component
 type EntryItemProps = {
   entry: Entry;
-  signals: EntrySignal[];
   onPress: () => void;
 };
 
-function EntryItem({ entry, signals, onPress }: EntryItemProps) {
-  const latestSignal = signals.length > 0 ? signals[0] : null;
-  
+function EntryItem({ entry, onPress }: EntryItemProps) {
   const preview: EntryPreview = {
     id: entry.id,
     content: entry.content,
-    createdAt: entry.createdAt && !isNaN(entry.createdAt.getTime()) 
-      ? entry.createdAt.toLocaleString() 
-      : (entry.updatedAt && !isNaN(entry.updatedAt.getTime()) 
-        ? entry.updatedAt.toLocaleString() 
-        : 'Date unknown'),
+    createdAt: entry.createdAt.toLocaleString(),
     hasImages: !!entry.images && JSON.parse(entry.images).length > 0,
     hasVoiceNote: !!entry.voiceNote,
-    aiMood: latestSignal?.mood,
-    aiTags: latestSignal?.tags,
-    sentimentScore: latestSignal?.sentimentScore,
   };
 
   return (
@@ -94,7 +78,6 @@ function EntryItem({ entry, signals, onPress }: EntryItemProps) {
 
 const EnhancedEntryItem = withObservables(['entry'], ({ entry }: { entry: Entry; onPress: () => void }) => ({
   entry,
-  signals: entry.signals,
 }))(EntryItem);
 
 const enhance = withObservables([], () => ({

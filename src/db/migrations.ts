@@ -3,19 +3,6 @@ import { schemaMigrations } from '@nozbe/watermelondb/Schema/migrations';
 export default schemaMigrations({
   migrations: [
   {
-    // Version 2: Add mood field to entry_signals
-    toVersion: 2,
-    steps: [
-      {
-        type: 'add_columns',
-        table: 'entry_signals',
-        columns: [
-          { name: 'mood', type: 'string', isOptional: true },
-        ],
-      },
-    ],
-  },
-  {
     // Version 3: Add rating fields to entries
     toVersion: 3,
     steps: [
@@ -54,6 +41,13 @@ export default schemaMigrations({
           { name: 'voice_note', type: 'string', isOptional: true },
         ],
       },
+    ],
+  },
+  {
+    // Version 6: Clean up database - entry_signals table removed from schema
+    toVersion: 6,
+    steps: [
+      // No steps needed - table removed from schema, WatermelonDB will handle cleanup
     ],
   },
   ],

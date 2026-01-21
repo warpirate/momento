@@ -21,7 +21,7 @@ react {
     //   The list of variants to that are debuggable. For those we're going to
     //   skip the bundling of the JS bundle and the assets. By default is just 'debug'.
     //   If you add flavors like lite, prod, etc. you'll have to list your debuggableVariants.
-    // debuggableVariants = ["liteDebug", "prodDebug"]
+    debuggableVariants = ["devDebug"]
 
     /* Bundling */
     //   A list containing the node command and its flags. Default is just 'node'.
@@ -90,6 +90,23 @@ android {
             keyPassword 'android'
         }
     }
+    
+    flavorDimensions "version"
+    productFlavors {
+        dev {
+            dimension "version"
+            applicationIdSuffix ".dev"
+            versionNameSuffix "-dev"
+            // This makes it visually distinct on your phone
+            resValue "string", "app_name", "Momento Dev"
+        }
+        stable {
+            dimension "version"
+            // No suffix - this is your release app
+            resValue "string", "app_name", "Momento"
+        }
+    }
+    
     buildTypes {
         debug {
             signingConfig signingConfigs.debug

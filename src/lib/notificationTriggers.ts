@@ -1,5 +1,4 @@
 import Entry from '../db/model/Entry';
-import EntrySignalModel from '../db/model/EntrySignal';
 import { calculateStreak } from './streaks';
 import { getUnlockedBadges } from './gamification';
 
@@ -113,10 +112,18 @@ export function getTotalWords(entries: Entry[]): number {
   }, 0);
 }
 
+// Signal data interface for insight notifications
+interface SignalData {
+  createdAt: Date;
+  mood?: string;
+  activities?: string[];
+}
+
 // Check for pattern insights
+// Note: Entry signals have been removed from local database, pass empty array or fetch from server if needed
 export function checkInsightNotifications(
   entries: Entry[],
-  signals: EntrySignalModel[]
+  signals: SignalData[]
 ): NotificationTriggerResult[] {
   const results: NotificationTriggerResult[] = [];
 
@@ -128,19 +135,20 @@ export function checkInsightNotifications(
   const recentEntries = entries.filter(e => e.createdAt >= sevenDaysAgo);
   if (recentEntries.length < 5) return results;
 
+  // If no signals data is provided, return early
+  if (signals.length === 0) return results;
+
   const recentSignals = signals.filter(s => s.createdAt >= sevenDaysAgo);
 
   // Check for mood patterns
   const moods = recentSignals
     .map(s => s.mood)
-    .filter(m => m && m.length > 0);
+    .filter((m): m is string => m !== undefined && m.length > 0);
 
   if (moods.length >= 5) {
     const moodCounts: Record<string, number> = {};
     moods.forEach(mood => {
-      if (mood) {
-        moodCounts[mood] = (moodCounts[mood] || 0) + 1;
-      }
+      moodCounts[mood] = (moodCounts[mood] || 0) + 1;
     });
 
     const dominantMood = Object.entries(moodCounts)

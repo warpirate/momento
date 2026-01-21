@@ -4,7 +4,6 @@ import SQLiteAdapter from '@nozbe/watermelondb/adapters/sqlite';
 import { schema } from './schema';
 import migrations from './migrations';
 import Entry from './model/Entry';
-import EntrySignal from './model/EntrySignal';
 
 const adapter = new SQLiteAdapter({
   schema,
@@ -23,6 +22,5 @@ export const database = new Database({
   adapter,
   modelClasses: [
     Entry,
-    EntrySignal,
   ],
 });

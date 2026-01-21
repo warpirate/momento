@@ -28,29 +28,8 @@ export async function sync() {
           console.log('User ID:', session.user.id);
         }
         
-        let needsFullSync = false;
-        try {
-          const allEntries = await database.get('entries').query().fetch();
-          
-          if (allEntries.length === 0) {
-            needsFullSync = true;
-          } else {
-            const invalidEntries = allEntries.filter((entry: any) => {
-              const createdAt = entry.createdAt;
-              return !createdAt || isNaN(createdAt.getTime()) || createdAt.getTime() === 0 || createdAt.getFullYear() < 2000;
-            });
-            if (invalidEntries.length > 0) {
-              console.log(`Found ${invalidEntries.length} entries with invalid timestamps, forcing full sync`);
-              needsFullSync = true;
-            }
-          }
-        } catch (err) {
-          console.warn('Error checking for invalid timestamps:', err);
-          needsFullSync = true;
-        }
-        
-        // Force a fresh pull - use 0 to get all entries if we have invalid timestamps
-        const freshLastPulledAt = needsFullSync ? 0 : (lastPulledAt ? lastPulledAt - 1000 : 0);
+        // Force a fresh pull by using a slightly older timestamp to avoid cache issues
+        const freshLastPulledAt = lastPulledAt ? lastPulledAt - 1000 : 0;
         console.log('Using fresh timestamp:', freshLastPulledAt);
         
         const { data, error } = await supabase.rpc('pull_changes', {
@@ -65,11 +44,6 @@ export async function sync() {
 
         const { changes, timestamp } = data;
         console.log('Pulled changes:', changes);
-
-        // Log timestamps for debugging - database should have correct timestamps
-        if (changes.entries?.created?.length > 0) {
-          console.log('Sample entry timestamps from server:', changes.entries.created[0]?.created_at, changes.entries.created[0]?.updated_at);
-        }
 
         // Fix for "Server wants client to create record... but it already exists locally"
         // 1) entries table
@@ -92,9 +66,7 @@ export async function sync() {
 
               for (const entry of changes.entries.created) {
                 if (existingIds.has(entry.id)) {
-                  // Move to updated - this will fix the timestamp from server
                   newUpdated.push(entry);
-                  console.log(`Moving entry ${entry.id} to updated to fix timestamp:`, entry.created_at);
                 } else {
                   newCreated.push(entry);
                 }
@@ -108,38 +80,9 @@ export async function sync() {
           }
         }
 
-        // 2) entry_signals table
-        if (changes.entry_signals?.created?.length > 0) {
-          const createdSignalIds = changes.entry_signals.created.map((s: any) => s.id);
-          try {
-            const existingSignalRecords = await database
-              .get('entry_signals')
-              .query(Q.where('id', Q.oneOf(createdSignalIds)))
-              .fetch();
-            const existingSignalIds = new Set(existingSignalRecords.map(r => r.id));
-
-            if (existingSignalIds.size > 0) {
-              console.log(
-                'Found existing entry_signals records in created list, moving to updated:',
-                Array.from(existingSignalIds),
-              );
-              const newCreatedSignals: any[] = [];
-              const newUpdatedSignals = changes.entry_signals.updated || [];
-
-              for (const signal of changes.entry_signals.created) {
-                if (existingSignalIds.has(signal.id)) {
-                  newUpdatedSignals.push(signal);
-                } else {
-                  newCreatedSignals.push(signal);
-                }
-              }
-
-              changes.entry_signals.created = newCreatedSignals;
-              changes.entry_signals.updated = newUpdatedSignals;
-            }
-          } catch (err) {
-            console.warn('Error checking for existing entry_signals records:', err);
-          }
+        // Remove entry_signals from changes since table was removed from schema
+        if (changes.entry_signals) {
+          delete changes.entry_signals;
         }
 
         console.log('Timestamp from server:', timestamp);
@@ -240,14 +183,6 @@ export function setupRealtimeSubscription(userId: string) {
       { event: '*', schema: 'public', table: 'entries', filter: `user_id=eq.${userId}` },
       (payload) => {
         console.log('Realtime change detected in entries:', payload);
-        sync();
-      }
-    )
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'entry_signals' },
-      (payload) => {
-        console.log('Realtime change detected in entry_signals:', payload);
         sync();
       }
     )

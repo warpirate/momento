@@ -35,7 +35,6 @@ import { useAlert } from '../context/AlertContext';
 import { haptics } from '../lib/haptics';
 import { TrendAlertCard } from '../components/TrendAlertCard';
 import { analyzeTrends, TrendAlert, EntrySignal } from '../lib/trendAnalysis';
-import EntrySignalModel from '../db/model/EntrySignal';
 import { NotificationBell } from '../components/NotificationBell';
 import { NotificationInbox } from '../components/NotificationInbox';
 import { useNotifications } from '../context/NotificationContext';
@@ -53,10 +52,9 @@ import {
 type JournalScreenProps = {
   userId: string;
   entries: Entry[];
-  signals: EntrySignalModel[];
 };
 
-function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
+function JournalScreen({ userId, entries }: JournalScreenProps) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const rootNavigation = navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
   const { colors, spacing } = useTheme();
@@ -164,13 +162,11 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
       }
 
       const newEntry = await database.write(async () => {
-        const now = Date.now();
         return await database.get<Entry>('entries').create(record => {
           record.content = trimmed;
           record.userId = userId;
           if (finalImages.length > 0) record.images = JSON.stringify(finalImages);
           if (finalVoiceNote) record.voiceNote = finalVoiceNote;
-          // createdAt and updatedAt are handled automatically by WatermelonDB
         });
       });
 
@@ -203,7 +199,6 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
   async function checkNotificationTriggers() {
     try {
       const allEntries = await database.get<Entry>('entries').query().fetch();
-      const allSignals = await database.get<EntrySignalModel>('entry_signals').query().fetch();
 
       // Get previous stats from storage
       const statsKey = `momento:stats:${userId}`;
@@ -254,7 +249,7 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
 
       // Check for insights (less frequently - only if we have enough data)
       if (allEntries.length >= 7 && allEntries.length % 5 === 0) {
-        const insightNotifs = checkInsightNotifications(allEntries, allSignals);
+        const insightNotifs = checkInsightNotifications(allEntries, []);
         for (const notif of insightNotifs) {
           if (notif.shouldNotify && notif.type && notif.title && notif.message) {
             await createNotification(notif.type, notif.title, notif.message, notif.data, false);
@@ -285,12 +280,7 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
   const sortedEntries = useMemo(
     () =>
       [...entries].sort(
-        (a, b) => {
-          // Handle invalid dates by putting them at the end
-          const aTime = a.createdAt && !isNaN(a.createdAt.getTime()) ? a.createdAt.getTime() : 0;
-          const bTime = b.createdAt && !isNaN(b.createdAt.getTime()) ? b.createdAt.getTime() : 0;
-          return bTime - aTime;
-        },
+        (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
       ),
     [entries],
   );
@@ -310,8 +300,6 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
     const today = new Date();
     return sortedEntries.find(entry => {
       const date = entry.createdAt;
-      // Validate date first
-      if (!date || isNaN(date.getTime()) || date.getTime() === 0) return false;
       return (
         date.getDate() === today.getDate() &&
         date.getMonth() === today.getMonth() &&
@@ -325,9 +313,6 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
     const today = new Date();
     const pastEntries = sortedEntries.filter(entry => {
       const date = entry.createdAt;
-      // Validate date first
-      if (!date || isNaN(date.getTime()) || date.getTime() === 0) return false;
-      // Check if not today
       return !(
         date.getDate() === today.getDate() &&
         date.getMonth() === today.getMonth() &&
@@ -339,19 +324,7 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
     
     // Get a random entry
     const randomEntry = pastEntries[Math.floor(Math.random() * pastEntries.length)];
-    const entryDate = randomEntry.createdAt;
-    
-    // Validate the date before calculating
-    if (!entryDate || isNaN(entryDate.getTime()) || entryDate.getTime() === 0) {
-      return null;
-    }
-    
-    const daysAgo = Math.floor((today.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
-    
-    // Sanity check: if daysAgo is unreasonably large, something is wrong
-    if (daysAgo < 0 || daysAgo > 36500) { // More than 100 years is clearly wrong
-      return null;
-    }
+    const daysAgo = Math.floor((today.getTime() - randomEntry.createdAt.getTime()) / (1000 * 60 * 60 * 24));
     
     return {
       content: randomEntry.content.slice(0, 150) + (randomEntry.content.length > 150 ? '...' : ''),
@@ -362,18 +335,10 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
 
   // Analyze trends and generate alerts
   const trendAlerts = useMemo(() => {
-    const signalsData: EntrySignal[] = signals.map(s => ({
-      id: s.id,
-      entryId: s.id, // Use signal ID as proxy since entry relation is lazy
-      mood: s.mood || undefined,
-      sentimentScore: s.sentimentScore ?? undefined,
-      activities: s.activities || undefined,
-      people: s.people || undefined,
-    }));
-    
-    const alerts = analyzeTrends(sortedEntries, signalsData);
+    // Entry signals have been removed - pass empty array
+    const alerts = analyzeTrends(sortedEntries, []);
     return alerts.filter(a => !dismissedAlerts.includes(a.type));
-  }, [sortedEntries, signals, dismissedAlerts]);
+  }, [sortedEntries, dismissedAlerts]);
 
   const handleDismissAlert = (alertType: string) => {
     setDismissedAlerts(prev => [...prev, alertType]);
@@ -449,25 +414,15 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
           />
         ))}
 
-        {onThisDayEntry && (() => {
-          const entryDate = onThisDayEntry.createdAt;
-          // Validate date before calculating yearsAgo
-          if (!entryDate || isNaN(entryDate.getTime()) || entryDate.getTime() === 0) {
-            return null;
-          }
-          const yearsAgo = new Date().getFullYear() - entryDate.getFullYear();
-          // Sanity check
-          if (yearsAgo < 0 || yearsAgo > 100) {
-            return null;
-          }
-          return (
-            <OnThisDayCard
-              entry={onThisDayEntry}
-              yearsAgo={yearsAgo}
-              onPress={() => navigation.navigate('EntryDetail', { entryId: onThisDayEntry.id })}
-            />
-          );
-        })()}
+        {onThisDayEntry && (
+          <OnThisDayCard
+            entry={onThisDayEntry}
+            yearsAgo={
+              new Date().getFullYear() - onThisDayEntry.createdAt.getFullYear()
+            }
+            onPress={() => navigation.navigate('EntryDetail', { entryId: onThisDayEntry.id })}
+          />
+        )}
 
         {pastEntryQuote && (
           <TouchableOpacity 
@@ -519,14 +474,7 @@ function JournalScreen({ userId, entries, signals }: JournalScreenProps) {
 
 const EnhancedEntryPreviewCard = withObservables(['entry'], ({ entry }: { entry: Entry }) => ({
   entry,
-  signals: entry.signals,
-}))(({ entry, signals }: { entry: Entry; signals: any[] }) => {
-  
-  const latestSignal = signals.length > 0 ? signals[0] : null;
-  const tags: string[] = [];
-  if (latestSignal?.mood) tags.push(latestSignal.mood);
-  if (Array.isArray(latestSignal?.activities)) tags.push(...latestSignal.activities.slice(0, 2));
-
+}))(({ entry }: { entry: Entry }) => {
   const images = entry.images ? JSON.parse(entry.images) : [];
   const hasVideos = images.some((uri: string) => uri.endsWith('.mp4') || uri.endsWith('.mov'));
   const hasImages = images.some((uri: string) => !uri.endsWith('.mp4') && !uri.endsWith('.mov'));
@@ -535,7 +483,6 @@ const EnhancedEntryPreviewCard = withObservables(['entry'], ({ entry }: { entry:
     id: entry.id,
     content: entry.content,
     createdAt: formatTimestamp(entry.createdAt),
-    tags: tags.length ? tags.slice(0, 2) : undefined,
     hasImages,
     hasVideos,
     hasVoiceNote: !!entry.voiceNote,
@@ -631,7 +578,6 @@ const styles = StyleSheet.create({
 
 const enhance = withObservables(['userId'], ({ userId }) => ({
   entries: database.get<Entry>('entries').query().observe(),
-  signals: database.get<EntrySignalModel>('entry_signals').query().observe(),
 }));
 
 export default function JournalScreenWrapper() {

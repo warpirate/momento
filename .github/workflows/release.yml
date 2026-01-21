@@ -61,14 +61,14 @@ jobs:
           cd android
           chmod +x ./gradlew
           ./gradlew clean
-          ./gradlew assembleRelease
+          ./gradlew assembleStableRelease
           echo "Build completed, checking for APK..."
           find . -name "*.apk" -type f
           cd ..
 
       - name: Find and Rename APK
         run: |
-          APK_PATH=$(find android -name "app-release.apk" -type f | head -1)
+          APK_PATH=$(find android -name "app-stable-release.apk" -type f | head -1)
           if [ -z "$APK_PATH" ]; then
             echo "No APK found, checking all APK files:"
             find android -name "*.apk" -type f

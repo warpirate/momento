@@ -12,9 +12,7 @@ function generateUUID(): string {
 
 export default class Entry extends Model {
   static table = 'entries';
-  static associations = {
-    entry_signals: { type: 'has_many', foreignKey: 'entry_id' },
-  } as const;
+  static associations = {} as const;
 
   @field('content') content!: string;
   @field('user_id') userId!: string;
@@ -25,8 +23,6 @@ export default class Entry extends Model {
   @field('voice_note') voiceNote?: string;
   @readonly @date('created_at') createdAt!: Date;
   @readonly @date('updated_at') updatedAt!: Date;
-
-  @children('entry_signals') signals!: any;
 
   // Use proper v4 UUID generation
   static async generateId() {

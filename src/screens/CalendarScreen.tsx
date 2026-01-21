@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
 import { database } from '../db';
 import Entry from '../db/model/Entry';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { ScreenLayout } from '../components/ui/ScreenLayout';
@@ -10,64 +10,21 @@ import { Typography } from '../components/ui/Typography';
 import { Card } from '../components/ui/Card';
 import { useTheme } from '../theme/theme';
 import Icon from 'react-native-vector-icons/Feather';
-import { useSyncContext } from '../lib/SyncContext';
 
 export default function CalendarScreen() {
   console.log('Render CalendarScreen');
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors, spacing, borderRadius } = useTheme();
-  const { sync, isSyncing } = useSyncContext();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [calendarDays, setCalendarDays] = useState<Date[]>([]);
 
-  const fetchEntries = async () => {
-    console.log('Fetching entries from local database...');
-    const allEntries = await database.get<Entry>('entries').query().fetch();
-    console.log(`Found ${allEntries.length} entries in local database`);
-    setEntries(allEntries);
-  };
-
-  // Trigger sync and fetch entries when screen comes into focus
-  useFocusEffect(
-    React.useCallback(() => {
-      let isActive = true;
-
-      const syncAndFetch = async () => {
-        try {
-          console.log('CalendarScreen: Triggering sync...');
-          await sync();
-          if (isActive) {
-            await fetchEntries();
-          }
-        } catch (error) {
-          console.error('CalendarScreen: Sync failed', error);
-          // Still fetch local entries even if sync fails
-          if (isActive) {
-            await fetchEntries();
-          }
-        }
-      };
-
-      syncAndFetch();
-
-      return () => {
-        isActive = false;
-      };
-    }, [])
-  );
-
-  // Also set up a database observer to refresh when entries change
   useEffect(() => {
-    const subscription = database.get<Entry>('entries')
-      .query()
-      .observe()
-      .subscribe(entries => {
-        console.log(`CalendarScreen: Database observer triggered, ${entries.length} entries`);
-        setEntries(entries);
-      });
-
-    return () => subscription.unsubscribe();
+    const fetchEntries = async () => {
+      const allEntries = await database.get<Entry>('entries').query().fetch();
+      setEntries(allEntries);
+    };
+    fetchEntries();
   }, []);
 
   useEffect(() => {
@@ -98,9 +55,7 @@ export default function CalendarScreen() {
 
   const hasEntryOnDate = (date: Date) => {
     return entries.some(entry => {
-      const entryDate = entry.createdAt;
-      // Show entries even if date is invalid - don't filter them out
-      if (!entryDate || isNaN(entryDate.getTime())) return false;
+      const entryDate = new Date(entry.createdAt);
       return (
         entryDate.getDate() === date.getDate() &&
         entryDate.getMonth() === date.getMonth() &&
@@ -112,9 +67,7 @@ export default function CalendarScreen() {
   const getEntriesForDate = (date: Date) => {
     return entries
       .filter(entry => {
-        const entryDate = entry.createdAt;
-        // Show entries even if date is invalid - don't filter them out
-        if (!entryDate || isNaN(entryDate.getTime())) return false;
+        const entryDate = new Date(entry.createdAt);
         return (
           entryDate.getDate() === date.getDate() &&
           entryDate.getMonth() === date.getMonth() &&
@@ -122,11 +75,9 @@ export default function CalendarScreen() {
         );
       })
       .sort(
-        (a, b) => {
-          const aTime = a.createdAt && !isNaN(a.createdAt.getTime()) ? a.createdAt.getTime() : 0;
-          const bTime = b.createdAt && !isNaN(b.createdAt.getTime()) ? b.createdAt.getTime() : 0;
-          return bTime - aTime;
-        },
+        (a, b) =>
+          new Date(b.createdAt).getTime() -
+          new Date(a.createdAt).getTime(),
       );
   };
 
@@ -238,11 +189,7 @@ export default function CalendarScreen() {
                   onPress={() => navigation.navigate('EntryDetail', { entryId: item.id })}
                 >
                   <Typography style={styles.entryTime} color={colors.primary}>
-                    {item.createdAt && !isNaN(item.createdAt.getTime()) && item.createdAt.getTime() > 0
-                      ? item.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                      : item.updatedAt && !isNaN(item.updatedAt.getTime()) && item.updatedAt.getTime() > 0
-                      ? item.updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                      : '--:--'}
+                    {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </Typography>
                   <View style={styles.entryContent}>
                     <Typography style={styles.entryPreview} numberOfLines={1}>
